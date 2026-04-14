@@ -99,18 +99,42 @@
       min-width: 72px;
     }
 
-    #dark-mode-btn { display: none; }
-
-    /* ── Theme toggle ── */
-    #theme-group {
+    /* ── Inputs panel ── */
+    #inputs-wrap {
+      position: relative;
+      margin-left: auto;
+    }
+    #inputs-panel {
+      display: none;
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: var(--ctrl-bg);
+      border: 1px solid var(--ctrl-border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      z-index: 50;
+      min-width: 180px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    }
+    #inputs-panel.open { display: block; }
+    #inputs-panel-title {
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.6;
+      margin-bottom: 6px;
+    }
+    #mode-group {
       display: flex;
       border-radius: 6px;
       overflow: hidden;
       border: 1px solid var(--ctrl-border);
-      margin-left: auto;
     }
-    .theme-btn {
-      padding: 4px 13px;
+    .mode-btn {
+      flex: 1;
+      padding: 5px 0;
       background: transparent;
       color: var(--color);
       border: none;
@@ -120,9 +144,32 @@
       white-space: nowrap;
       transition: background 0.1s, color 0.1s;
     }
-    .theme-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
-    .theme-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
-    .theme-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
+    .mode-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
+    .mode-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
+    .mode-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
+    #mode-desc {
+      font-size: 11px;
+      margin-top: 6px;
+      color: var(--color);
+      opacity: 0.75;
+      line-height: 1.4;
+    }
+
+    /* ── Theme icon button ── */
+    #theme-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--ctrl-border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      cursor: pointer;
+      color: var(--color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    #theme-toggle-btn:hover { background: var(--btn-hover); color: #f0f0f0; border-color: var(--btn-hover); }
 
     /* ── Column arena ── */
     #arena {
@@ -194,11 +241,33 @@
     </div>
     <button id="new-game-btn" class="ctrl-btn">New Game</button>
     <span id="timer">00:00.0</span>
-    <button id="dark-mode-btn" class="ctrl-btn">☀️ Light</button>
-    <div id="theme-group">
-      <button class="theme-btn active" id="dark-btn">Dark</button>
-      <button class="theme-btn" id="light-btn">Light</button>
+    <div id="inputs-wrap">
+      <button id="inputs-btn" class="ctrl-btn">Inputs ▾</button>
+      <div id="inputs-panel">
+        <div id="inputs-panel-title">Move Mode</div>
+        <div id="mode-group">
+          <button class="mode-btn active" id="insert-btn">Insert</button>
+          <button class="mode-btn" id="swap-btn">Swap</button>
+        </div>
+        <div id="mode-desc">Selected columns are inserted at the clicked position.</div>
+      </div>
     </div>
+    <button id="theme-toggle-btn" title="Toggle theme" aria-label="Toggle theme">
+      <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+      <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+    </button>
   </div>
 
   <div id="arena"></div>
@@ -211,13 +280,19 @@
 
   <script>
     /* ── DOM refs ── */
-    const arena       = document.getElementById('arena');
-    const timerEl     = document.getElementById('timer');
-    const overlay     = document.getElementById('overlay');
-    const finalTimeEl = document.getElementById('final-time');
-    const diffBtns    = document.querySelectorAll('.diff-btn');
-    const darkBtn     = document.getElementById('dark-btn');
-    const lightBtn    = document.getElementById('light-btn');
+    const arena          = document.getElementById('arena');
+    const timerEl        = document.getElementById('timer');
+    const overlay        = document.getElementById('overlay');
+    const finalTimeEl    = document.getElementById('final-time');
+    const diffBtns       = document.querySelectorAll('.diff-btn');
+    const themeToggleBtn = document.getElementById('theme-toggle-btn');
+    const iconMoon       = document.getElementById('icon-moon');
+    const iconSun        = document.getElementById('icon-sun');
+    const inputsBtn      = document.getElementById('inputs-btn');
+    const inputsPanel    = document.getElementById('inputs-panel');
+    const insertBtn      = document.getElementById('insert-btn');
+    const swapBtn        = document.getElementById('swap-btn');
+    const modeDesc       = document.getElementById('mode-desc');
 
     /* ── Difficulty state ── */
     let selectedCols = 30;
@@ -231,31 +306,58 @@
       });
     });
 
-    darkBtn.addEventListener('click', () => {
-      document.body.classList.remove('light');
-      darkBtn.classList.add('active');
-      lightBtn.classList.remove('active');
+    /* ── Theme toggle ── */
+    let isLight = false;
+
+    themeToggleBtn.addEventListener('click', () => {
+      isLight = !isLight;
+      document.body.classList.toggle('light', isLight);
+      iconMoon.style.display = isLight ? 'none' : '';
+      iconSun.style.display  = isLight ? ''     : 'none';
     });
 
-    lightBtn.addEventListener('click', () => {
-      document.body.classList.add('light');
-      lightBtn.classList.add('active');
-      darkBtn.classList.remove('active');
+    /* ── Inputs panel ── */
+    let inputMode = 'insert'; // 'insert' | 'swap'
+
+    const modeDescriptions = {
+      insert: 'Selected columns are inserted at the clicked position.',
+      swap:   'Selected columns swap places with the clicked column.'
+    };
+
+    inputsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      inputsPanel.classList.toggle('open');
+    });
+    inputsPanel.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => inputsPanel.classList.remove('open'));
+
+    insertBtn.addEventListener('click', () => {
+      inputMode = 'insert';
+      insertBtn.classList.add('active');
+      swapBtn.classList.remove('active');
+      modeDesc.textContent = modeDescriptions.insert;
+    });
+
+    swapBtn.addEventListener('click', () => {
+      inputMode = 'swap';
+      swapBtn.classList.add('active');
+      insertBtn.classList.remove('active');
+      modeDesc.textContent = modeDescriptions.swap;
     });
 
     /* ── State ── */
-    const MIN_H = 44;                  // px – comfortable touch-target height
-    const ARENA_V_PAD = 6;             // px – arena top (4) + bottom (2) padding sum
+    const MIN_H = 44;
+    const ARENA_V_PAD = 6;
 
-    let values        = [];   // shuffled array of ranks 1..N
-    let selSet        = new Set();   // indices of selected bars
-    let isDragging    = false;
-    let dragStartIdx  = -1;
+    let values         = [];
+    let selSet         = new Set();
+    let isDragging     = false;
+    let dragStartIdx   = -1;
     let dragCurrentIdx = -1;
-    let running       = false;
-    let finished      = false;
-    let startMs       = 0;
-    let tickId        = null;
+    let running        = false;
+    let finished       = false;
+    let startMs        = 0;
+    let tickId         = null;
 
     /* ── Helpers ── */
     function shuffle(arr) {
@@ -297,7 +399,7 @@
       return s;
     }
 
-    /* ── Move selected bars to target position ── */
+    /* ── Move selected bars to target position (insert mode) ── */
     function moveSelectedTo(targetIdx) {
       if (selSet.size === 0 || selSet.has(targetIdx)) return;
 
@@ -320,6 +422,57 @@
       ];
     }
 
+    /* ── Swap selected bars with target (swap mode) ── */
+    function swapSelectedWith(targetIdx) {
+      if (selSet.size === 0 || selSet.has(targetIdx)) return;
+
+      const selIndices = Array.from(selSet).sort((a, b) => a - b);
+      const n = selIndices.length;
+
+      if (n === 1) {
+        // Simple single-bar swap
+        const si = selIndices[0];
+        [values[si], values[targetIdx]] = [values[targetIdx], values[si]];
+        return;
+      }
+
+      // Block swap: collect n target indices starting from targetIdx, skipping selected
+      const targetIndices = [];
+      for (let i = targetIdx; targetIndices.length < n && i < values.length; i++) {
+        if (!selSet.has(i)) targetIndices.push(i);
+      }
+      // If not enough going forward, fill from before targetIdx
+      for (let i = targetIdx - 1; targetIndices.length < n && i >= 0; i--) {
+        if (!selSet.has(i)) targetIndices.unshift(i);
+      }
+
+      const count      = Math.min(n, targetIndices.length);
+      const selVals    = selIndices.slice(0, count).map(i => values[i]);
+      const targetVals = targetIndices.slice(0, count).map(i => values[i]);
+      for (let j = 0; j < count; j++) {
+        values[selIndices[j]]    = targetVals[j];
+        values[targetIndices[j]] = selVals[j];
+      }
+    }
+
+    /* ── Apply move based on current mode ── */
+    function applyMove(targetIdx) {
+      if (inputMode === 'swap') swapSelectedWith(targetIdx);
+      else moveSelectedTo(targetIdx);
+    }
+
+    /* ── Check win condition ── */
+    function checkWin() {
+      if (isSorted(values)) {
+        finished        = true;
+        const elapsed   = stopTimer();
+        const t         = fmtTime(elapsed);
+        timerEl.textContent     = t;
+        finalTimeEl.textContent = `Time: ${t}`;
+        overlay.classList.add('show');
+      }
+    }
+
     /* ── Render ── */
     function render() {
       const bars = arena.children;
@@ -331,6 +484,28 @@
       }
     }
 
+    /* ── Shared release handler (mouse & touch) ── */
+    function handleRelease(wasDrag, releaseIdx) {
+      isDragging = false;
+      if (wasDrag) {
+        selSet = getRange(dragStartIdx, releaseIdx);
+      } else {
+        const clickedIdx = releaseIdx;
+        if (selSet.size > 0) {
+          if (selSet.has(clickedIdx)) {
+            selSet.clear();
+          } else {
+            applyMove(clickedIdx);
+            selSet.clear();
+            checkWin();
+          }
+        } else {
+          selSet = new Set([clickedIdx]);
+        }
+      }
+      render();
+    }
+
     /* ── Build DOM ── */
     function buildBars(n) {
       arena.innerHTML = '';
@@ -338,12 +513,13 @@
         const bar = document.createElement('div');
         bar.className = 'bar';
 
+        /* Mouse events */
         bar.addEventListener('mousedown', (e) => {
           if (finished) return;
           e.preventDefault();
           if (!running) startTimer();
-          isDragging = true;
-          dragStartIdx = i;
+          isDragging     = true;
+          dragStartIdx   = i;
           dragCurrentIdx = i;
         });
 
@@ -354,46 +530,54 @@
           render();
         });
 
+        /* Touch start */
+        bar.addEventListener('touchstart', (e) => {
+          if (finished) return;
+          e.preventDefault();
+          if (!running) startTimer();
+          isDragging     = true;
+          dragStartIdx   = i;
+          dragCurrentIdx = i;
+        }, { passive: false });
+
         arena.appendChild(bar);
       }
     }
 
-    /* ── Document-level mouseup: finalise selection or click action ── */
+    /* ── Document-level mouse events ── */
     document.addEventListener('mouseup', () => {
       if (!isDragging) return;
-      isDragging = false;
-
       const wasDrag = dragCurrentIdx !== dragStartIdx;
+      handleRelease(wasDrag, dragCurrentIdx);
+    });
 
-      if (wasDrag) {
-        // Drag: finalise multi-column selection
-        selSet = getRange(dragStartIdx, dragCurrentIdx);
-      } else {
-        // Single click
-        const clickedIdx = dragStartIdx;
-        if (selSet.size > 0) {
-          if (selSet.has(clickedIdx)) {
-            // Clicking a selected bar → cancel selection
-            selSet.clear();
-          } else {
-            // Clicking a non-selected bar → move group here
-            moveSelectedTo(clickedIdx);
-            selSet.clear();
-            if (isSorted(values)) {
-              finished        = true;
-              const elapsed   = stopTimer();
-              const t         = fmtTime(elapsed);
-              timerEl.textContent     = t;
-              finalTimeEl.textContent = `Time: ${t}`;
-              overlay.classList.add('show');
-            }
-          }
-        } else {
-          // No current selection → select this bar
-          selSet = new Set([clickedIdx]);
+    /* ── Document-level touch events ── */
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (el && el.classList.contains('bar')) {
+        const bars = Array.from(arena.children);
+        const idx  = bars.indexOf(el);
+        if (idx !== -1 && idx !== dragCurrentIdx) {
+          dragCurrentIdx = idx;
+          selSet = getRange(dragStartIdx, idx);
+          render();
         }
       }
+    }, { passive: false });
 
+    document.addEventListener('touchend', () => {
+      if (!isDragging) return;
+      const wasDrag = dragCurrentIdx !== dragStartIdx;
+      handleRelease(wasDrag, dragCurrentIdx);
+    });
+
+    document.addEventListener('touchcancel', () => {
+      if (!isDragging) return;
+      isDragging = false;
+      selSet.clear();
       render();
     });
 
@@ -423,9 +607,9 @@
         [values[0], values[1]] = [values[1], values[0]];
       }
 
-      selSet        = new Set();
-      isDragging    = false;
-      dragStartIdx  = -1;
+      selSet         = new Set();
+      isDragging     = false;
+      dragStartIdx   = -1;
       dragCurrentIdx = -1;
       finished      = false;
 
