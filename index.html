@@ -536,6 +536,7 @@
     let isDragging     = false;
     let dragStartIdx   = -1;
     let dragCurrentIdx = -1;
+    let ctrlDeselect   = -1; // index of bar being ctrl+clicked to deselect, or -1
     let running        = false;
     let finished       = false;
     let startMs        = 0;
@@ -700,6 +701,11 @@
         bar.addEventListener('mousedown', (e) => {
           if (finished) return;
           e.preventDefault();
+          // Ctrl+click on a selected bar: deselect it instead of starting a drag
+          if (e.ctrlKey && selSet.has(i)) {
+            ctrlDeselect = i;
+            return;
+          }
           if (!running) startTimer();
           isDragging     = true;
           dragStartIdx   = i;
@@ -717,6 +723,12 @@
         bar.addEventListener('touchstart', (e) => {
           if (finished) return;
           e.preventDefault();
+          // Second finger on a selected bar while first finger is held: deselect it
+          if (isDragging && e.touches.length >= 2 && selSet.has(i)) {
+            selSet.delete(i);
+            render();
+            return;
+          }
           if (!running) startTimer();
           isDragging     = true;
           dragStartIdx   = i;
@@ -729,6 +741,12 @@
 
     /* ── Document-level mouse events ── */
     document.addEventListener('mouseup', () => {
+      if (ctrlDeselect !== -1) {
+        selSet.delete(ctrlDeselect);
+        ctrlDeselect = -1;
+        render();
+        return;
+      }
       if (!isDragging) return;
       const wasDrag = dragCurrentIdx !== dragStartIdx;
       handleRelease(wasDrag, dragCurrentIdx);
