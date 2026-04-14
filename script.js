@@ -12,6 +12,8 @@ const settingsPanel  = document.getElementById('settings-panel');
 const insertBtn      = document.getElementById('insert-btn');
 const swapBtn        = document.getElementById('swap-btn');
 const modeDesc       = document.getElementById('mode-desc');
+const replayBanner   = document.getElementById('replay-banner');
+const replayStopBtn  = document.getElementById('replay-stop-btn');
 
 /* ── Difficulty state ── */
 let selectedCols = 30;
@@ -52,18 +54,23 @@ const HS_MAX = 5;
 
 function loadScores() {
   try {
-    return JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
+    const data = JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
+    // Normalize old format (plain numbers → objects)
+    for (const key of ['easy', 'normal', 'hard']) {
+      data[key] = (data[key] || []).map(s => typeof s === 'number' ? { ms: s, replay: null } : s);
+    }
+    return data;
   } catch {
     // localStorage may be unavailable or contain corrupt data; start fresh
     return { easy: [], normal: [], hard: [] };
   }
 }
 
-function saveScore(diff, ms) {
+function saveScore(diff, ms, replay) {
   const scores = loadScores();
   scores[diff] = scores[diff] || [];
-  scores[diff].push(ms);
-  scores[diff].sort((a, b) => a - b);
+  scores[diff].push({ ms, replay });
+  scores[diff].sort((a, b) => a.ms - b.ms);
   scores[diff] = scores[diff].slice(0, HS_MAX);
   localStorage.setItem(HS_KEY, JSON.stringify(scores));
   renderHighScores();
@@ -86,18 +93,27 @@ function renderHighScores() {
       empty.textContent = 'No scores yet';
       col.appendChild(empty);
     } else {
-      list.forEach((ms, i) => {
-        const entry = document.createElement('div');
-        entry.className = 'hs-entry';
+      list.forEach((entry, i) => {
+        const div = document.createElement('div');
+        div.className = 'hs-entry';
         const rank = document.createElement('span');
         rank.className = 'hs-rank';
         rank.textContent = `#${i + 1}`;
         const time = document.createElement('span');
         time.className = 'hs-time';
-        time.textContent = fmtTime(ms);
-        entry.appendChild(rank);
-        entry.appendChild(time);
-        col.appendChild(entry);
+        time.textContent = fmtTime(entry.ms);
+        div.appendChild(rank);
+        div.appendChild(time);
+        if (entry.replay) {
+          const btn = document.createElement('button');
+          btn.className = 'hs-replay-btn';
+          btn.textContent = '▶';
+          btn.title = 'Watch replay';
+          const r = entry.replay;
+          btn.addEventListener('click', () => watchReplay(r));
+          div.appendChild(btn);
+        }
+        col.appendChild(div);
       });
     }
   }
@@ -145,6 +161,22 @@ let tickId         = null;
 let touchStartX = 0;
 let touchStartY = 0;
 let touchIsDrag = false;
+
+/* ── Replay state ── */
+let replayInitVals = [];  // snapshot of values[] taken at game start
+let replayEvents   = [];  // recorded events: [absT, type, ...args]
+                          //   type 0 = drag-select  args=[lo, hi]
+                          //   type 1 = click-select  args=[idx]
+                          //   type 2 = deselect      args=[]
+                          //   type 3 = move          args=[targetIdx, isSwap(0|1)]
+let replayTids     = [];  // setTimeout IDs for active replay
+let isReplaying    = false;
+
+/* Record a replay event (no-op before timer starts or after game ends) */
+function recEvent(...args) {
+  if (!startMs || finished) return;
+  replayEvents.push([Date.now() - startMs, ...args]);
+}
 
 /* ── Helpers ── */
 function shuffle(arr) {
@@ -256,7 +288,8 @@ function checkWin() {
     const t         = fmtTime(elapsed);
     timerEl.textContent     = t;
     finalTimeEl.textContent = `Time: ${t}`;
-    saveScore(selectedDiff, elapsed);
+    const replay = { numBars: values.length, init: replayInitVals, events: replayEvents };
+    saveScore(selectedDiff, elapsed, replay);
     overlay.classList.add('show');
   }
 }
@@ -276,19 +309,25 @@ function render() {
 function handleRelease(wasDrag, releaseIdx) {
   isDragging = false;
   if (wasDrag) {
+    const lo = Math.min(dragStartIdx, releaseIdx);
+    const hi = Math.max(dragStartIdx, releaseIdx);
     selSet = getRange(dragStartIdx, releaseIdx);
+    recEvent(0, lo, hi);
   } else {
     const clickedIdx = releaseIdx;
     if (selSet.size > 0) {
       if (selSet.has(clickedIdx)) {
         selSet.clear();
+        recEvent(2);
       } else {
+        recEvent(3, clickedIdx, inputMode === 'swap' ? 1 : 0);
         applyMove(clickedIdx);
         selSet.clear();
         checkWin();
       }
     } else {
       selSet = new Set([clickedIdx]);
+      recEvent(1, clickedIdx);
     }
   }
   render();
@@ -303,7 +342,7 @@ function buildBars(n) {
 
     /* Mouse events */
     bar.addEventListener('mousedown', (e) => {
-      if (finished) return;
+      if (finished || isReplaying) return;
       e.preventDefault();
       // Ctrl+click on a selected bar: deselect it instead of starting a drag
       if (e.ctrlKey && selSet.has(i)) {
@@ -325,14 +364,8 @@ function buildBars(n) {
 
     /* Touch start */
     bar.addEventListener('touchstart', (e) => {
-      if (finished) return;
+      if (finished || isReplaying) return;
       e.preventDefault();
-      // Second finger on a selected bar while first finger is held: deselect it
-      if (isDragging && e.touches.length >= 2 && selSet.has(i)) {
-        selSet.delete(i);
-        render();
-        return;
-      }
       if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
@@ -348,6 +381,7 @@ function buildBars(n) {
 
 /* ── Document-level mouse events ── */
 document.addEventListener('mouseup', () => {
+  if (isReplaying) return;
   if (ctrlDeselect !== -1) {
     selSet.delete(ctrlDeselect);
     ctrlDeselect   = -1;
@@ -390,6 +424,7 @@ document.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 document.addEventListener('touchend', () => {
+  if (isReplaying) return;
   if (!isDragging) return;
   // Use the drag-threshold flag instead of index comparison so that a stationary
   // tap on a selected bar reliably triggers deselection on mobile.
@@ -399,6 +434,7 @@ document.addEventListener('touchend', () => {
 });
 
 document.addEventListener('touchcancel', () => {
+  if (isReplaying) return;
   if (!isDragging) return;
   isDragging  = false;
   touchIsDrag = false;
@@ -424,6 +460,13 @@ function stopTimer() {
 
 /* ── New game ── */
 function newGame() {
+  if (isReplaying) {
+    replayTids.forEach(clearTimeout);
+    replayTids   = [];
+    isReplaying  = false;
+    replayBanner.classList.remove('active');
+  }
+
   const n = selectedCols;
 
   values = Array.from({ length: n }, (_, k) => k + 1);
@@ -431,6 +474,9 @@ function newGame() {
   if (isSorted(values)) {
     [values[0], values[1]] = [values[1], values[0]];
   }
+
+  replayInitVals = values.slice();
+  replayEvents   = [];
 
   selSet         = new Set();
   isDragging     = false;
@@ -441,6 +487,7 @@ function newGame() {
   if (tickId) clearInterval(tickId);
   tickId  = null;
   running = false;
+  startMs = 0;
 
   timerEl.textContent  = '00:00.0';
   overlay.classList.remove('show');
@@ -452,8 +499,76 @@ function newGame() {
 /* ── Control listeners ── */
 document.getElementById('new-game-btn').addEventListener('click', newGame);
 document.getElementById('play-again-btn').addEventListener('click', newGame);
+replayStopBtn.addEventListener('click', stopReplay);
 
 window.addEventListener('resize', render);
+
+/* ── Replay playback ── */
+function applyReplayEvent(type, args) {
+  if (!isReplaying) return;
+  switch (type) {
+    case 0: // drag-select [lo, hi]
+      selSet = getRange(args[0], args[1]);
+      break;
+    case 1: // click-select [idx]
+      selSet = new Set([args[0]]);
+      break;
+    case 2: // deselect
+      selSet.clear();
+      break;
+    case 3: // move [targetIdx, isSwap]
+      inputMode = args[1] ? 'swap' : 'insert';
+      applyMove(args[0]);
+      selSet.clear();
+      break;
+  }
+  render();
+}
+
+function watchReplay(replay) {
+  // Tear down any existing replay or running game
+  if (isReplaying) {
+    replayTids.forEach(clearTimeout);
+    replayTids = [];
+  }
+  if (tickId) { clearInterval(tickId); tickId = null; }
+  running   = false;
+  finished  = false;
+  selSet.clear();
+  overlay.classList.remove('show');
+  isReplaying = true;
+  replayBanner.classList.add('active');
+
+  // Restore initial state
+  values = replay.init.slice();
+  buildBars(replay.numBars);
+  render();
+
+  // Schedule each recorded event at its original timestamp
+  for (const ev of replay.events) {
+    const [t, type, ...args] = ev;
+    const tid = setTimeout(() => applyReplayEvent(type, args), t);
+    replayTids.push(tid);
+  }
+
+  // After all events, show the final sorted state
+  const lastEvent = replay.events[replay.events.length - 1];
+  const lastT = lastEvent ? lastEvent[0] : 0;
+  const finTid = setTimeout(() => {
+    if (!isReplaying) return;
+    finished = true;
+    render();
+  }, lastT + 400);
+  replayTids.push(finTid);
+}
+
+function stopReplay() {
+  replayTids.forEach(clearTimeout);
+  replayTids  = [];
+  isReplaying = false;
+  replayBanner.classList.remove('active');
+  newGame();
+}
 
 /* ── Boot ── */
 renderHighScores();
