@@ -167,8 +167,7 @@ let replayInitVals = [];  // snapshot of values[] taken at game start
 let replayEvents   = [];  // recorded events: [absT, type, ...args]
                           //   type 0 = drag-select  args=[lo, hi]
                           //   type 1 = click-select  args=[idx]
-                          //   type 2 = deselect      args=[]
-                          //   type 3 = move          args=[targetIdx, isSwap(0|1)]
+                          //   type 3 = move          args=[targetIdx, isSwap(0|1), selIndices[]]
 let replayTids     = [];  // setTimeout IDs for active replay
 let isReplaying    = false;
 
@@ -318,9 +317,8 @@ function handleRelease(wasDrag, releaseIdx) {
     if (selSet.size > 0) {
       if (selSet.has(clickedIdx)) {
         selSet.clear();
-        recEvent(2);
       } else {
-        recEvent(3, clickedIdx, inputMode === 'swap' ? 1 : 0);
+        recEvent(3, clickedIdx, inputMode === 'swap' ? 1 : 0, Array.from(selSet).sort((a, b) => a - b));
         applyMove(clickedIdx);
         selSet.clear();
         checkWin();
@@ -513,10 +511,8 @@ function applyReplayEvent(type, args) {
     case 1: // click-select [idx]
       selSet = new Set([args[0]]);
       break;
-    case 2: // deselect
-      selSet.clear();
-      break;
-    case 3: // move [targetIdx, isSwap]
+    case 3: // move [targetIdx, isSwap, selIndices[]]
+      selSet = new Set(args[2]);
       inputMode = args[1] ? 'swap' : 'insert';
       applyMove(args[0]);
       selSet.clear();
