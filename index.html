@@ -743,7 +743,10 @@
     document.addEventListener('mouseup', () => {
       if (ctrlDeselect !== -1) {
         selSet.delete(ctrlDeselect);
-        ctrlDeselect = -1;
+        ctrlDeselect   = -1;
+        isDragging     = false;
+        dragStartIdx   = -1;
+        dragCurrentIdx = -1;
         render();
         return;
       }
