@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="HumanSort – race the clock to manually sort shuffled columns by swapping them with clicks. Choose 20–50 columns and beat your best time!">
+  <title>HumanSort</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: #0d0d1a;
+      color: #f0f0f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body { display: flex; flex-direction: column; }
+
+    /* ── Controls bar ── */
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 14px;
+      padding: 6px 12px;
+      background: #1a1a2e;
+      border-bottom: 2px solid #0f3460;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    #controls label { font-size: 13px; white-space: nowrap; }
+
+    #col-slider {
+      width: 90px;
+      cursor: pointer;
+      accent-color: #4ecca3;
+    }
+
+    #new-game-btn {
+      padding: 5px 12px;
+      background: #0f3460;
+      color: #f0f0f0;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+    #new-game-btn:hover, #new-game-btn:active { background: #e94560; }
+
+    #timer {
+      font-family: monospace;
+      font-size: 17px;
+      font-weight: bold;
+      color: #4ecca3;
+      min-width: 72px;
+    }
+
+    #status {
+      font-size: 12px;
+      color: #aaa;
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Column arena ── */
+    #arena {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      padding: 4px 6px 2px;
+      gap: 2px;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .bar {
+      flex: 1;
+      min-width: 0;
+      border-radius: 3px 3px 0 0;
+      cursor: pointer;
+      background: #2563eb;
+      transition: background 0.08s, transform 0.08s;
+    }
+    .bar:hover  { background: #7c3aed; }
+    .bar.sel    { background: #e94560; transform: scaleX(1.05); }
+    .bar.sorted { background: #10b981; cursor: default; }
+
+    /* ── Win overlay ── */
+    #overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.78);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 14px;
+      z-index: 100;
+    }
+    #overlay.show { display: flex; }
+    #overlay h2   { font-size: 36px; color: #10b981; }
+    #overlay .lbl { font-size: 22px; color: #f0f0f0; }
+    #overlay button {
+      padding: 10px 28px;
+      font-size: 16px;
+      background: #0f3460;
+      color: #f0f0f0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #overlay button:hover, #overlay button:active { background: #e94560; }
+
+    /* Landscape hint for very small screens */
+    @media screen and (max-height: 300px) {
+      #controls { padding: 3px 8px; gap: 4px 10px; }
+      #controls label, #status { font-size: 11px; }
+      #timer { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="controls">
+    <label for="col-slider">Columns:&nbsp;<strong id="col-val">30</strong></label>
+    <input id="col-slider" type="range" min="20" max="50" value="30" step="1">
+    <button id="new-game-btn">New Game</button>
+    <span id="timer">00:00.0</span>
+    <span id="status">Click a column to start</span>
+  </div>
+
+  <div id="arena"></div>
+
+  <div id="overlay">
+    <h2>🎉 Sorted!</h2>
+    <div class="lbl" id="final-time"></div>
+    <button id="play-again-btn">Play Again</button>
+  </div>
+
+  <script>
+    /* ── DOM refs ── */
+    const arena       = document.getElementById('arena');
+    const timerEl     = document.getElementById('timer');
+    const statusEl    = document.getElementById('status');
+    const colSlider   = document.getElementById('col-slider');
+    const colValEl    = document.getElementById('col-val');
+    const overlay     = document.getElementById('overlay');
+    const finalTimeEl = document.getElementById('final-time');
+
+    /* ── State ── */
+    const MIN_H = 44;                  // px – comfortable touch-target height
+    const ARENA_V_PAD = 6;             // px – arena top (4) + bottom (2) padding sum
+
+    let values   = [];   // shuffled array of ranks 1..N
+    let selIdx   = -1;   // first-selected bar index, or -1
+    let running  = false;
+    let finished = false;
+    let startMs  = 0;
+    let tickId   = null;
+
+    /* ── Helpers ── */
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function isSorted(arr) {
+      for (let i = 1; i < arr.length; i++) if (arr[i] < arr[i - 1]) return false;
+      return true;
+    }
+
+    function fmtTime(ms) {
+      const totalS = Math.floor(ms / 1000);
+      const m      = Math.floor(totalS / 60);
+      const s      = totalS % 60;
+      const tenth  = Math.floor((ms % 1000) / 100);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${tenth}`;
+    }
+
+    /* ── Heights ── */
+    // Compute the per-rank pixel step so that rank 1 → MIN_H
+    // and rank N → full arena height (minus padding).
+    function getStep() {
+      const availH = arena.clientHeight - ARENA_V_PAD;
+      const n = values.length;
+      return n > 1 ? (availH - MIN_H) / (n - 1) : 0;
+    }
+
+    function rankToHeight(rank, step) {
+      return MIN_H + (rank - 1) * step;
+    }
+
+    /* ── Render ── */
+    function render() {
+      const bars = arena.children;
+      const step = getStep();
+      for (let i = 0; i < bars.length; i++) {
+        bars[i].style.height = rankToHeight(values[i], step) + 'px';
+        bars[i].classList.toggle('sel',    !finished && i === selIdx);
+        bars[i].classList.toggle('sorted', finished);
+      }
+    }
+
+    /* ── Build DOM ── */
+    function buildBars(n) {
+      arena.innerHTML = '';
+      for (let i = 0; i < n; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.addEventListener('click', () => onBarClick(i));
+        arena.appendChild(bar);
+      }
+    }
+
+    /* ── Timer ── */
+    function startTimer() {
+      startMs = Date.now();
+      running = true;
+      tickId  = setInterval(() => {
+        timerEl.textContent = fmtTime(Date.now() - startMs);
+      }, 100);
+    }
+
+    function stopTimer() {
+      clearInterval(tickId);
+      tickId  = null;
+      running = false;
+      return Date.now() - startMs;
+    }
+
+    /* ── Click handler ── */
+    function onBarClick(i) {
+      if (finished) return;
+      if (!running) startTimer();
+
+      if (selIdx === -1) {
+        // First selection
+        selIdx = i;
+        statusEl.textContent = 'Now click another column to swap';
+      } else if (selIdx === i) {
+        // Deselect
+        selIdx = -1;
+        statusEl.textContent = 'Click a column to select it';
+      } else {
+        // Swap
+        [values[selIdx], values[i]] = [values[i], values[selIdx]];
+        selIdx = -1;
+
+        if (isSorted(values)) {
+          finished        = true;
+          const elapsed   = stopTimer();
+          const t         = fmtTime(elapsed);
+          timerEl.textContent  = t;
+          statusEl.textContent = `Sorted! 🎉 ${t}`;
+          finalTimeEl.textContent = `Time: ${t}`;
+          overlay.classList.add('show');
+        } else {
+          statusEl.textContent = 'Click a column to select it';
+        }
+      }
+
+      render();
+    }
+
+    /* ── New game ── */
+    function newGame() {
+      const n = parseInt(colSlider.value, 10);
+
+      // Build shuffled rank array, guaranteeing it is NOT already sorted.
+      // Shuffle once, then do a single deterministic swap if the result is
+      // (extremely unlikely but possible) already in sorted order.
+      values = Array.from({ length: n }, (_, k) => k + 1);
+      shuffle(values);
+      if (isSorted(values)) {
+        // Swap the first two elements — with n ≥ 20 this always breaks the order
+        [values[0], values[1]] = [values[1], values[0]];
+      }
+
+      selIdx   = -1;
+      finished = false;
+
+      if (tickId) clearInterval(tickId);
+      tickId  = null;
+      running = false;
+
+      timerEl.textContent  = '00:00.0';
+      statusEl.textContent = 'Click a column to start';
+      overlay.classList.remove('show');
+
+      buildBars(n);
+      // Wait one frame so the flex layout is resolved before computing heights
+      requestAnimationFrame(render);
+    }
+
+    /* ── Control listeners ── */
+    colSlider.addEventListener('input', () => {
+      colValEl.textContent = colSlider.value;
+    });
+
+    document.getElementById('new-game-btn').addEventListener('click', newGame);
+    document.getElementById('play-again-btn').addEventListener('click', newGame);
+
+    window.addEventListener('resize', render);
+
+    /* ── Boot ── */
+    newGame();
+  </script>
+</body>
+</html>
