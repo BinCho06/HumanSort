@@ -16,6 +16,7 @@
       --btn-bg:       #0f3460;
       --btn-hover:    #e94560;
       --timer-color:  #4ecca3;
+      --hs-bg:        #12122a;
     }
 
     body.light {
@@ -26,20 +27,24 @@
       --btn-bg:       #3b82f6;
       --btn-hover:    #1d4ed8;
       --timer-color:  #059669;
+      --hs-bg:        #e8edf3;
     }
 
-    html, body {
-      height: 100%;
-      overflow: hidden;
+    html { height: 100%; }
+
+    body {
+      min-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
       background: var(--bg);
       color: var(--color);
       font-family: system-ui, -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
       transition: background 0.2s, color 0.2s;
+      display: flex;
+      flex-direction: column;
     }
-
-    body { display: flex; flex-direction: column; }
 
     /* ── Controls bar ── */
     #controls {
@@ -51,31 +56,10 @@
       background: var(--ctrl-bg);
       border-bottom: 2px solid var(--ctrl-border);
       flex-shrink: 0;
+      position: sticky;
+      top: 0;
       z-index: 10;
     }
-
-    /* ── Difficulty toggle ── */
-    #difficulty-group {
-      display: flex;
-      border-radius: 6px;
-      overflow: hidden;
-      border: 1px solid var(--ctrl-border);
-    }
-
-    .diff-btn {
-      padding: 4px 13px;
-      background: transparent;
-      color: var(--color);
-      border: none;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: bold;
-      white-space: nowrap;
-      transition: background 0.1s, color 0.1s;
-    }
-    .diff-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
-    .diff-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
-    .diff-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
 
     /* ── Shared button style ── */
     .ctrl-btn {
@@ -99,33 +83,83 @@
       min-width: 72px;
     }
 
-    /* ── Inputs panel ── */
-    #inputs-wrap {
+    /* ── Settings panel ── */
+    #settings-wrap {
       position: relative;
       margin-left: auto;
     }
-    #inputs-panel {
+
+    #settings-btn {
+      background: transparent;
+      border: 1px solid var(--ctrl-border);
+      border-radius: 6px;
+      padding: 5px 8px;
+      cursor: pointer;
+      color: var(--color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 0;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+    }
+    #settings-btn:hover { background: var(--btn-hover); color: #f0f0f0; border-color: var(--btn-hover); }
+
+    #settings-panel {
       display: none;
       position: absolute;
       top: calc(100% + 6px);
       right: 0;
       background: var(--ctrl-bg);
       border: 1px solid var(--ctrl-border);
-      border-radius: 6px;
-      padding: 8px 10px;
+      border-radius: 8px;
+      padding: 12px 14px;
       z-index: 50;
-      min-width: 180px;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+      min-width: 220px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+      flex-direction: column;
+      gap: 12px;
     }
-    #inputs-panel.open { display: block; }
-    #inputs-panel-title {
+    #settings-panel.open { display: flex; }
+
+    .settings-section {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .settings-label {
       font-size: 11px;
       font-weight: bold;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       opacity: 0.6;
-      margin-bottom: 6px;
     }
+
+    /* ── Difficulty toggle ── */
+    #difficulty-group {
+      display: flex;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--ctrl-border);
+    }
+
+    .diff-btn {
+      flex: 1;
+      padding: 4px 13px;
+      background: transparent;
+      color: var(--color);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
+    }
+    .diff-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
+    .diff-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
+    .diff-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
+
+    /* ── Move mode ── */
     #mode-group {
       display: flex;
       border-radius: 6px;
@@ -149,11 +183,18 @@
     .mode-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
     #mode-desc {
       font-size: 11px;
-      margin-top: 6px;
       color: var(--color);
       opacity: 0.75;
       line-height: 1.4;
     }
+
+    /* ── Theme row ── */
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .settings-row-label { font-size: 13px; }
 
     /* ── Theme icon button ── */
     #theme-toggle-btn {
@@ -173,14 +214,12 @@
 
     /* ── Column arena ── */
     #arena {
-      flex: 1;
       display: flex;
       align-items: flex-end;
       padding: 4px 6px 2px;
       gap: 2px;
       overflow: hidden;
-      min-height: 0;
-      max-height: min(600px, 65vh);
+      height: min(600px, 65vh);
       margin: 8px;
       outline: 2px solid var(--ctrl-border);
       border-radius: 4px;
@@ -197,6 +236,58 @@
     .bar:hover  { background: #7c3aed; }
     .bar.sel    { background: #eab308; transform: scaleX(1.05); }
     .bar.sorted { background: #10b981; cursor: default; }
+
+    /* ── High Scores ── */
+    #highscores {
+      margin: 0 8px 16px;
+      background: var(--hs-bg);
+      border: 1px solid var(--ctrl-border);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+
+    #highscores h3 {
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.65;
+      margin-bottom: 10px;
+    }
+
+    #hs-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .hs-col { display: flex; flex-direction: column; gap: 4px; }
+
+    .hs-col-title {
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.55;
+      margin-bottom: 2px;
+    }
+
+    .hs-entry {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .hs-rank { opacity: 0.45; min-width: 16px; text-align: right; }
+    .hs-time { color: var(--timer-color); font-weight: bold; }
+
+    .hs-empty {
+      font-size: 12px;
+      opacity: 0.35;
+      font-style: italic;
+    }
 
     /* ── Win overlay ── */
     #overlay {
@@ -234,43 +325,73 @@
 <body>
 
   <div id="controls">
-    <div id="difficulty-group">
-      <button class="diff-btn" data-cols="20">Easy</button>
-      <button class="diff-btn active" data-cols="30">Normal</button>
-      <button class="diff-btn" data-cols="50">Hard</button>
-    </div>
     <button id="new-game-btn" class="ctrl-btn">New Game</button>
     <span id="timer">00:00.0</span>
-    <div id="inputs-wrap">
-      <button id="inputs-btn" class="ctrl-btn">Inputs ▾</button>
-      <div id="inputs-panel">
-        <div id="inputs-panel-title">Move Mode</div>
-        <div id="mode-group">
-          <button class="mode-btn active" id="insert-btn">Insert</button>
-          <button class="mode-btn" id="swap-btn">Swap</button>
+    <div id="settings-wrap">
+      <button id="settings-btn" title="Settings" aria-label="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <div id="settings-panel">
+        <div class="settings-section">
+          <div class="settings-label">Difficulty</div>
+          <div id="difficulty-group">
+            <button class="diff-btn" data-cols="20">Easy</button>
+            <button class="diff-btn active" data-cols="30">Normal</button>
+            <button class="diff-btn" data-cols="50">Hard</button>
+          </div>
         </div>
-        <div id="mode-desc">Selected columns are inserted at the clicked position.</div>
+        <div class="settings-section">
+          <div class="settings-label">Move Mode</div>
+          <div id="mode-group">
+            <button class="mode-btn active" id="insert-btn">Insert</button>
+            <button class="mode-btn" id="swap-btn">Swap</button>
+          </div>
+          <div id="mode-desc">Selected columns are inserted at the clicked position.</div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-row">
+            <span class="settings-row-label">Theme</span>
+            <button id="theme-toggle-btn" title="Toggle theme" aria-label="Toggle theme">
+              <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+              <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
-    <button id="theme-toggle-btn" title="Toggle theme" aria-label="Toggle theme">
-      <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-      </svg>
-      <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-        <circle cx="12" cy="12" r="5"/>
-        <line x1="12" y1="1" x2="12" y2="3"/>
-        <line x1="12" y1="21" x2="12" y2="23"/>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-        <line x1="1" y1="12" x2="3" y2="12"/>
-        <line x1="21" y1="12" x2="23" y2="12"/>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-      </svg>
-    </button>
   </div>
 
   <div id="arena"></div>
+
+  <section id="highscores">
+    <h3>🏆 High Scores</h3>
+    <div id="hs-grid">
+      <div class="hs-col" id="hs-easy">
+        <div class="hs-col-title">Easy (20)</div>
+      </div>
+      <div class="hs-col" id="hs-normal">
+        <div class="hs-col-title">Normal (30)</div>
+      </div>
+      <div class="hs-col" id="hs-hard">
+        <div class="hs-col-title">Hard (50)</div>
+      </div>
+    </div>
+  </section>
 
   <div id="overlay">
     <h2>🎉 Sorted!</h2>
@@ -288,20 +409,23 @@
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     const iconMoon       = document.getElementById('icon-moon');
     const iconSun        = document.getElementById('icon-sun');
-    const inputsBtn      = document.getElementById('inputs-btn');
-    const inputsPanel    = document.getElementById('inputs-panel');
+    const settingsBtn    = document.getElementById('settings-btn');
+    const settingsPanel  = document.getElementById('settings-panel');
     const insertBtn      = document.getElementById('insert-btn');
     const swapBtn        = document.getElementById('swap-btn');
     const modeDesc       = document.getElementById('mode-desc');
 
     /* ── Difficulty state ── */
     let selectedCols = 30;
+    let selectedDiff = 'normal'; // 'easy' | 'normal' | 'hard'
+    const diffMap = { '20': 'easy', '30': 'normal', '50': 'hard' };
 
     diffBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         diffBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         selectedCols = parseInt(btn.dataset.cols, 10);
+        selectedDiff = diffMap[btn.dataset.cols];
         newGame();
       });
     });
@@ -316,20 +440,78 @@
       iconSun.style.display  = isLight ? ''     : 'none';
     });
 
-    /* ── Inputs panel ── */
+    /* ── Settings panel ── */
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      settingsPanel.classList.toggle('open');
+    });
+    settingsPanel.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => settingsPanel.classList.remove('open'));
+
+    /* ── High Scores ── */
+    const HS_KEY = 'humansort_scores';
+    const HS_MAX = 5;
+
+    function loadScores() {
+      try {
+        return JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
+      } catch {
+        // localStorage may be unavailable or contain corrupt data; start fresh
+        return { easy: [], normal: [], hard: [] };
+      }
+    }
+
+    function saveScore(diff, ms) {
+      const scores = loadScores();
+      scores[diff] = scores[diff] || [];
+      scores[diff].push(ms);
+      scores[diff].sort((a, b) => a - b);
+      scores[diff] = scores[diff].slice(0, HS_MAX);
+      localStorage.setItem(HS_KEY, JSON.stringify(scores));
+      renderHighScores();
+    }
+
+    function renderHighScores() {
+      const scores = loadScores();
+      const diffs = [
+        { key: 'easy',   id: 'hs-easy',   label: 'Easy (20)' },
+        { key: 'normal', id: 'hs-normal', label: 'Normal (30)' },
+        { key: 'hard',   id: 'hs-hard',   label: 'Hard (50)' },
+      ];
+      for (const d of diffs) {
+        const col = document.getElementById(d.id);
+        col.replaceChildren(col.firstElementChild);
+        const list = scores[d.key] || [];
+        if (list.length === 0) {
+          const empty = document.createElement('span');
+          empty.className = 'hs-empty';
+          empty.textContent = 'No scores yet';
+          col.appendChild(empty);
+        } else {
+          list.forEach((ms, i) => {
+            const entry = document.createElement('div');
+            entry.className = 'hs-entry';
+            const rank = document.createElement('span');
+            rank.className = 'hs-rank';
+            rank.textContent = `#${i + 1}`;
+            const time = document.createElement('span');
+            time.className = 'hs-time';
+            time.textContent = fmtTime(ms);
+            entry.appendChild(rank);
+            entry.appendChild(time);
+            col.appendChild(entry);
+          });
+        }
+      }
+    }
+
+    /* ── Move mode ── */
     let inputMode = 'insert'; // 'insert' | 'swap'
 
     const modeDescriptions = {
       insert: 'Selected columns are inserted at the clicked position.',
       swap:   'Selected columns swap places with the clicked column.'
     };
-
-    inputsBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      inputsPanel.classList.toggle('open');
-    });
-    inputsPanel.addEventListener('click', (e) => e.stopPropagation());
-    document.addEventListener('click', () => inputsPanel.classList.remove('open'));
 
     insertBtn.addEventListener('click', () => {
       inputMode = 'insert';
@@ -469,6 +651,7 @@
         const t         = fmtTime(elapsed);
         timerEl.textContent     = t;
         finalTimeEl.textContent = `Time: ${t}`;
+        saveScore(selectedDiff, elapsed);
         overlay.classList.add('show');
       }
     }
@@ -631,6 +814,7 @@
     window.addEventListener('resize', render);
 
     /* ── Boot ── */
+    renderHighScores();
     newGame();
   </script>
 </body>
