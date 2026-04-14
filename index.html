@@ -99,7 +99,30 @@
       min-width: 72px;
     }
 
-    #dark-mode-btn { margin-left: auto; }
+    #dark-mode-btn { display: none; }
+
+    /* ── Theme toggle ── */
+    #theme-group {
+      display: flex;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--ctrl-border);
+      margin-left: auto;
+    }
+    .theme-btn {
+      padding: 4px 13px;
+      background: transparent;
+      color: var(--color);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
+    }
+    .theme-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
+    .theme-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
+    .theme-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
 
     /* ── Column arena ── */
     #arena {
@@ -111,7 +134,9 @@
       overflow: hidden;
       min-height: 0;
       max-height: min(600px, 65vh);
-      width: 100%;
+      margin: 8px;
+      outline: 2px solid var(--ctrl-border);
+      border-radius: 4px;
     }
 
     .bar {
@@ -170,6 +195,10 @@
     <button id="new-game-btn" class="ctrl-btn">New Game</button>
     <span id="timer">00:00.0</span>
     <button id="dark-mode-btn" class="ctrl-btn">☀️ Light</button>
+    <div id="theme-group">
+      <button class="theme-btn active" id="dark-btn">Dark</button>
+      <button class="theme-btn" id="light-btn">Light</button>
+    </div>
   </div>
 
   <div id="arena"></div>
@@ -187,7 +216,8 @@
     const overlay     = document.getElementById('overlay');
     const finalTimeEl = document.getElementById('final-time');
     const diffBtns    = document.querySelectorAll('.diff-btn');
-    const darkModeBtn = document.getElementById('dark-mode-btn');
+    const darkBtn     = document.getElementById('dark-btn');
+    const lightBtn    = document.getElementById('light-btn');
 
     /* ── Difficulty state ── */
     let selectedCols = 30;
@@ -201,21 +231,31 @@
       });
     });
 
-    darkModeBtn.addEventListener('click', () => {
-      const isLight = document.body.classList.toggle('light');
-      darkModeBtn.textContent = isLight ? '🌙 Dark' : '☀️ Light';
+    darkBtn.addEventListener('click', () => {
+      document.body.classList.remove('light');
+      darkBtn.classList.add('active');
+      lightBtn.classList.remove('active');
+    });
+
+    lightBtn.addEventListener('click', () => {
+      document.body.classList.add('light');
+      lightBtn.classList.add('active');
+      darkBtn.classList.remove('active');
     });
 
     /* ── State ── */
     const MIN_H = 44;                  // px – comfortable touch-target height
     const ARENA_V_PAD = 6;             // px – arena top (4) + bottom (2) padding sum
 
-    let values   = [];   // shuffled array of ranks 1..N
-    let selIdx   = -1;   // first-selected bar index, or -1
-    let running  = false;
-    let finished = false;
-    let startMs  = 0;
-    let tickId   = null;
+    let values        = [];   // shuffled array of ranks 1..N
+    let selSet        = new Set();   // indices of selected bars
+    let isDragging    = false;
+    let dragStartIdx  = -1;
+    let dragCurrentIdx = -1;
+    let running       = false;
+    let finished      = false;
+    let startMs       = 0;
+    let tickId        = null;
 
     /* ── Helpers ── */
     function shuffle(arr) {
@@ -239,8 +279,6 @@
     }
 
     /* ── Heights ── */
-    // Compute the per-rank pixel step so that rank 1 → MIN_H
-    // and rank N → full arena height (minus padding).
     function getStep() {
       const availH = arena.clientHeight - ARENA_V_PAD;
       const n = values.length;
@@ -251,13 +289,44 @@
       return MIN_H + (rank - 1) * step;
     }
 
+    /* ── Drag range helper ── */
+    function getRange(a, b) {
+      const s = new Set();
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      for (let i = lo; i <= hi; i++) s.add(i);
+      return s;
+    }
+
+    /* ── Move selected bars to target position ── */
+    function moveSelectedTo(targetIdx) {
+      if (selSet.size === 0 || selSet.has(targetIdx)) return;
+
+      const selectedVals = Array.from(selSet)
+        .sort((a, b) => a - b)
+        .map(i => values[i]);
+
+      const remainingPairs = values
+        .map((v, i) => ({ v, i }))
+        .filter(({ i }) => !selSet.has(i));
+
+      // Insert the group just before the target column (adjusted for removed items)
+      let insertAt = remainingPairs.findIndex(p => p.i >= targetIdx);
+      if (insertAt === -1) insertAt = remainingPairs.length;
+
+      values = [
+        ...remainingPairs.slice(0, insertAt).map(p => p.v),
+        ...selectedVals,
+        ...remainingPairs.slice(insertAt).map(p => p.v)
+      ];
+    }
+
     /* ── Render ── */
     function render() {
       const bars = arena.children;
       const step = getStep();
       for (let i = 0; i < bars.length; i++) {
         bars[i].style.height = rankToHeight(values[i], step) + 'px';
-        bars[i].classList.toggle('sel',    !finished && i === selIdx);
+        bars[i].classList.toggle('sel',    !finished && selSet.has(i));
         bars[i].classList.toggle('sorted', finished);
       }
     }
@@ -268,10 +337,65 @@
       for (let i = 0; i < n; i++) {
         const bar = document.createElement('div');
         bar.className = 'bar';
-        bar.addEventListener('click', () => onBarClick(i));
+
+        bar.addEventListener('mousedown', (e) => {
+          if (finished) return;
+          e.preventDefault();
+          if (!running) startTimer();
+          isDragging = true;
+          dragStartIdx = i;
+          dragCurrentIdx = i;
+        });
+
+        bar.addEventListener('mouseenter', () => {
+          if (!isDragging) return;
+          dragCurrentIdx = i;
+          selSet = getRange(dragStartIdx, i);
+          render();
+        });
+
         arena.appendChild(bar);
       }
     }
+
+    /* ── Document-level mouseup: finalise selection or click action ── */
+    document.addEventListener('mouseup', () => {
+      if (!isDragging) return;
+      isDragging = false;
+
+      const wasDrag = dragCurrentIdx !== dragStartIdx;
+
+      if (wasDrag) {
+        // Drag: finalise multi-column selection
+        selSet = getRange(dragStartIdx, dragCurrentIdx);
+      } else {
+        // Single click
+        const clickedIdx = dragStartIdx;
+        if (selSet.size > 0) {
+          if (selSet.has(clickedIdx)) {
+            // Clicking a selected bar → cancel selection
+            selSet.clear();
+          } else {
+            // Clicking a non-selected bar → move group here
+            moveSelectedTo(clickedIdx);
+            selSet.clear();
+            if (isSorted(values)) {
+              finished        = true;
+              const elapsed   = stopTimer();
+              const t         = fmtTime(elapsed);
+              timerEl.textContent     = t;
+              finalTimeEl.textContent = `Time: ${t}`;
+              overlay.classList.add('show');
+            }
+          }
+        } else {
+          // No current selection → select this bar
+          selSet = new Set([clickedIdx]);
+        }
+      }
+
+      render();
+    });
 
     /* ── Timer ── */
     function startTimer() {
@@ -289,51 +413,21 @@
       return Date.now() - startMs;
     }
 
-    /* ── Click handler ── */
-    function onBarClick(i) {
-      if (finished) return;
-      if (!running) startTimer();
-
-      if (selIdx === -1) {
-        // First selection
-        selIdx = i;
-      } else if (selIdx === i) {
-        // Deselect
-        selIdx = -1;
-      } else {
-        // Swap
-        [values[selIdx], values[i]] = [values[i], values[selIdx]];
-        selIdx = -1;
-
-        if (isSorted(values)) {
-          finished        = true;
-          const elapsed   = stopTimer();
-          const t         = fmtTime(elapsed);
-          timerEl.textContent  = t;
-          finalTimeEl.textContent = `Time: ${t}`;
-          overlay.classList.add('show');
-        }
-      }
-
-      render();
-    }
-
     /* ── New game ── */
     function newGame() {
       const n = selectedCols;
 
-      // Build shuffled rank array, guaranteeing it is NOT already sorted.
-      // Shuffle once, then do a single deterministic swap if the result is
-      // (extremely unlikely but possible) already in sorted order.
       values = Array.from({ length: n }, (_, k) => k + 1);
       shuffle(values);
       if (isSorted(values)) {
-        // Swap the first two elements — with n ≥ 20 this always breaks the order
         [values[0], values[1]] = [values[1], values[0]];
       }
 
-      selIdx   = -1;
-      finished = false;
+      selSet        = new Set();
+      isDragging    = false;
+      dragStartIdx  = -1;
+      dragCurrentIdx = -1;
+      finished      = false;
 
       if (tickId) clearInterval(tickId);
       tickId  = null;
@@ -343,7 +437,6 @@
       overlay.classList.remove('show');
 
       buildBars(n);
-      // Wait one frame so the flex layout is resolved before computing heights
       requestAnimationFrame(render);
     }
 
