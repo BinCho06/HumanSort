@@ -281,6 +281,33 @@ body {
   font-style: italic;
 }
 
+/* ── Replay banner ── */
+#replay-banner {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+#replay-banner.active { display: flex; }
+
+.hs-replay-btn {
+  background: transparent;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+  color: var(--timer-color);
+  font-size: 11px;
+  line-height: 1.4;
+  margin-left: auto;
+}
+.hs-replay-btn:hover { background: var(--btn-hover); color: #fff; border-color: var(--btn-hover); }
+
 /* ── Win overlay ── */
 #overlay {
   display: none;
