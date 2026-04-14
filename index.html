@@ -456,6 +456,7 @@
       try {
         return JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
       } catch {
+        // localStorage may be unavailable or contain corrupt data; start fresh
         return { easy: [], normal: [], hard: [] };
       }
     }
@@ -479,7 +480,7 @@
       ];
       for (const d of diffs) {
         const col = document.getElementById(d.id);
-        while (col.children.length > 1) col.removeChild(col.lastChild);
+        col.replaceChildren(col.firstElementChild);
         const list = scores[d.key] || [];
         if (list.length === 0) {
           const empty = document.createElement('span');
@@ -490,7 +491,14 @@
           list.forEach((ms, i) => {
             const entry = document.createElement('div');
             entry.className = 'hs-entry';
-            entry.innerHTML = `<span class="hs-rank">#${i + 1}</span><span class="hs-time">${fmtTime(ms)}</span>`;
+            const rank = document.createElement('span');
+            rank.className = 'hs-rank';
+            rank.textContent = `#${i + 1}`;
+            const time = document.createElement('span');
+            time.className = 'hs-time';
+            time.textContent = fmtTime(ms);
+            entry.appendChild(rank);
+            entry.appendChild(time);
             col.appendChild(entry);
           });
         }
