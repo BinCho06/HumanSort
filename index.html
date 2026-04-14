@@ -8,14 +8,35 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    :root {
+      --bg:           #0d0d1a;
+      --color:        #f0f0f0;
+      --ctrl-bg:      #1a1a2e;
+      --ctrl-border:  #0f3460;
+      --btn-bg:       #0f3460;
+      --btn-hover:    #e94560;
+      --timer-color:  #4ecca3;
+    }
+
+    body.light {
+      --bg:           #f0f4f8;
+      --color:        #1a1a2e;
+      --ctrl-bg:      #e2e8f0;
+      --ctrl-border:  #94a3b8;
+      --btn-bg:       #3b82f6;
+      --btn-hover:    #1d4ed8;
+      --timer-color:  #059669;
+    }
+
     html, body {
       height: 100%;
       overflow: hidden;
-      background: #0d0d1a;
-      color: #f0f0f0;
+      background: var(--bg);
+      color: var(--color);
       font-family: system-ui, -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      transition: background 0.2s, color 0.2s;
     }
 
     body { display: flex; flex-direction: column; }
@@ -27,23 +48,39 @@
       align-items: center;
       gap: 6px 14px;
       padding: 6px 12px;
-      background: #1a1a2e;
-      border-bottom: 2px solid #0f3460;
+      background: var(--ctrl-bg);
+      border-bottom: 2px solid var(--ctrl-border);
       flex-shrink: 0;
       z-index: 10;
     }
 
-    #controls label { font-size: 13px; white-space: nowrap; }
-
-    #col-slider {
-      width: 90px;
-      cursor: pointer;
-      accent-color: #4ecca3;
+    /* ── Difficulty toggle ── */
+    #difficulty-group {
+      display: flex;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--ctrl-border);
     }
 
-    #new-game-btn {
+    .diff-btn {
+      padding: 4px 13px;
+      background: transparent;
+      color: var(--color);
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: bold;
+      white-space: nowrap;
+      transition: background 0.1s, color 0.1s;
+    }
+    .diff-btn:not(:last-child) { border-right: 1px solid var(--ctrl-border); }
+    .diff-btn.active            { background: var(--btn-bg); color: #f0f0f0; }
+    .diff-btn:hover:not(.active){ background: var(--btn-hover); color: #f0f0f0; }
+
+    /* ── Shared button style ── */
+    .ctrl-btn {
       padding: 5px 12px;
-      background: #0f3460;
+      background: var(--btn-bg);
       color: #f0f0f0;
       border: none;
       border-radius: 4px;
@@ -52,25 +89,17 @@
       font-weight: bold;
       white-space: nowrap;
     }
-    #new-game-btn:hover, #new-game-btn:active { background: #e94560; }
+    .ctrl-btn:hover, .ctrl-btn:active { background: var(--btn-hover); }
 
     #timer {
       font-family: monospace;
       font-size: 17px;
       font-weight: bold;
-      color: #4ecca3;
+      color: var(--timer-color);
       min-width: 72px;
     }
 
-    #status {
-      font-size: 12px;
-      color: #aaa;
-      flex: 1;
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+    #dark-mode-btn { margin-left: auto; }
 
     /* ── Column arena ── */
     #arena {
@@ -81,6 +110,8 @@
       gap: 2px;
       overflow: hidden;
       min-height: 0;
+      max-height: min(600px, 65vh);
+      width: 100%;
     }
 
     .bar {
@@ -92,7 +123,7 @@
       transition: background 0.08s, transform 0.08s;
     }
     .bar:hover  { background: #7c3aed; }
-    .bar.sel    { background: #e94560; transform: scaleX(1.05); }
+    .bar.sel    { background: #eab308; transform: scaleX(1.05); }
     .bar.sorted { background: #10b981; cursor: default; }
 
     /* ── Win overlay ── */
@@ -124,7 +155,6 @@
     /* Landscape hint for very small screens */
     @media screen and (max-height: 300px) {
       #controls { padding: 3px 8px; gap: 4px 10px; }
-      #controls label, #status { font-size: 11px; }
       #timer { font-size: 14px; }
     }
   </style>
@@ -132,11 +162,14 @@
 <body>
 
   <div id="controls">
-    <label for="col-slider">Columns:&nbsp;<strong id="col-val">30</strong></label>
-    <input id="col-slider" type="range" min="20" max="50" value="30" step="1">
-    <button id="new-game-btn">New Game</button>
+    <div id="difficulty-group">
+      <button class="diff-btn" data-cols="20">Easy</button>
+      <button class="diff-btn active" data-cols="30">Normal</button>
+      <button class="diff-btn" data-cols="50">Hard</button>
+    </div>
+    <button id="new-game-btn" class="ctrl-btn">New Game</button>
     <span id="timer">00:00.0</span>
-    <span id="status">Click a column to start</span>
+    <button id="dark-mode-btn" class="ctrl-btn">☀️ Light</button>
   </div>
 
   <div id="arena"></div>
@@ -151,11 +184,27 @@
     /* ── DOM refs ── */
     const arena       = document.getElementById('arena');
     const timerEl     = document.getElementById('timer');
-    const statusEl    = document.getElementById('status');
-    const colSlider   = document.getElementById('col-slider');
-    const colValEl    = document.getElementById('col-val');
     const overlay     = document.getElementById('overlay');
     const finalTimeEl = document.getElementById('final-time');
+    const diffBtns    = document.querySelectorAll('.diff-btn');
+    const darkModeBtn = document.getElementById('dark-mode-btn');
+
+    /* ── Difficulty state ── */
+    let selectedCols = 30;
+
+    diffBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        diffBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedCols = parseInt(btn.dataset.cols, 10);
+        newGame();
+      });
+    });
+
+    darkModeBtn.addEventListener('click', () => {
+      const isLight = document.body.classList.toggle('light');
+      darkModeBtn.textContent = isLight ? '🌙 Dark' : '☀️ Light';
+    });
 
     /* ── State ── */
     const MIN_H = 44;                  // px – comfortable touch-target height
@@ -248,11 +297,9 @@
       if (selIdx === -1) {
         // First selection
         selIdx = i;
-        statusEl.textContent = 'Now click another column to swap';
       } else if (selIdx === i) {
         // Deselect
         selIdx = -1;
-        statusEl.textContent = 'Click a column to select it';
       } else {
         // Swap
         [values[selIdx], values[i]] = [values[i], values[selIdx]];
@@ -263,11 +310,8 @@
           const elapsed   = stopTimer();
           const t         = fmtTime(elapsed);
           timerEl.textContent  = t;
-          statusEl.textContent = `Sorted! 🎉 ${t}`;
           finalTimeEl.textContent = `Time: ${t}`;
           overlay.classList.add('show');
-        } else {
-          statusEl.textContent = 'Click a column to select it';
         }
       }
 
@@ -276,7 +320,7 @@
 
     /* ── New game ── */
     function newGame() {
-      const n = parseInt(colSlider.value, 10);
+      const n = selectedCols;
 
       // Build shuffled rank array, guaranteeing it is NOT already sorted.
       // Shuffle once, then do a single deterministic swap if the result is
@@ -296,7 +340,6 @@
       running = false;
 
       timerEl.textContent  = '00:00.0';
-      statusEl.textContent = 'Click a column to start';
       overlay.classList.remove('show');
 
       buildBars(n);
@@ -305,10 +348,6 @@
     }
 
     /* ── Control listeners ── */
-    colSlider.addEventListener('input', () => {
-      colValEl.textContent = colSlider.value;
-    });
-
     document.getElementById('new-game-btn').addEventListener('click', newGame);
     document.getElementById('play-again-btn').addEventListener('click', newGame);
 
