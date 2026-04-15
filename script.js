@@ -235,6 +235,7 @@ let isDragging     = false;
 let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
+let suppressNextDocumentClick = false;
 let running        = false;
 let finished       = false;
 let startMs        = 0;
@@ -450,7 +451,9 @@ function buildBars(n) {
     /* Mouse events */
     bar.addEventListener('mousedown', (e) => {
       if (finished || isReplaying) return;
+      if (e.button !== 0) return; // primary button only
       e.preventDefault();
+      suppressNextDocumentClick = false;
       if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
@@ -494,10 +497,15 @@ document.addEventListener('mouseup', () => {
     mouseMoveBound = false;
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
+  if (wasDrag) suppressNextDocumentClick = true;
   handleRelease(wasDrag, dragCurrentIdx);
 });
 
 document.addEventListener('click', (e) => {
+  if (suppressNextDocumentClick) {
+    suppressNextDocumentClick = false;
+    return;
+  }
   if (isReplaying || finished || selSet.size === 0) return;
   if (e.target && e.target.closest('.bar')) return;
   setSelection(new Set());
