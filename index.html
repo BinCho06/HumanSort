@@ -10,7 +10,6 @@
 <body>
 
   <div id="controls">
-    <button id="new-game-btn" class="ctrl-btn">New Game</button>
     <span id="timer">00:00.0</span>
     <div id="settings-wrap">
       <button id="settings-btn" title="Settings" aria-label="Settings">
@@ -66,7 +65,16 @@
     <button id="replay-stop-btn" class="ctrl-btn">✕ Stop</button>
   </div>
 
-  <div id="arena"></div>
+  <div id="arena">
+    <div id="bars"></div>
+    <div id="pregame-overlay" class="show">
+      <div id="pregame-card">
+        <h2>Ready?</h2>
+        <p>The board is hidden until you press play.</p>
+        <button id="new-game-btn" class="ctrl-btn">Play</button>
+      </div>
+    </div>
+  </div>
 
   <section id="highscores">
     <h3>🏆 High Scores</h3>

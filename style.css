@@ -211,10 +211,8 @@ body {
 
 /* ── Column arena ── */
 #arena {
-  display: flex;
-  align-items: flex-end;
+  position: relative;
   padding: 4px 6px 2px;
-  gap: 2px;
   overflow: hidden;
   height: min(600px, 65vh);
   margin: 8px;
@@ -222,9 +220,18 @@ body {
   border-radius: 4px;
 }
 
+#bars {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  width: 100%;
+  gap: 0;
+}
+
 .bar {
   flex: 1;
   min-width: 0;
+  border: 1px solid var(--ctrl-border);
   border-radius: 3px 3px 0 0;
   cursor: pointer;
   background: #2563eb;
@@ -233,6 +240,39 @@ body {
 .bar:hover  { background: #7c3aed; }
 .bar.sel    { background: #eab308; transform: scaleX(1.05); }
 .bar.sorted { background: #10b981; cursor: default; }
+
+#pregame-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 96%, #000 4%);
+  padding: 12px;
+}
+#pregame-overlay.show { display: flex; }
+
+#pregame-card {
+  min-width: 240px;
+  max-width: 360px;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 8px;
+  background: var(--ctrl-bg);
+  text-align: center;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#pregame-card h2 {
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+#pregame-card p {
+  font-size: 13px;
+  opacity: 0.85;
+}
 
 /* ── High Scores ── */
 #highscores {
