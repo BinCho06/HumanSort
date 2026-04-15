@@ -231,8 +231,9 @@ const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a d
 
 let values         = [];
 let selSet         = new Set();
-let isDragging     = false;
-let dragStartIdx   = -1;
+let isDragging        = false;
+let suppressNextClick = false;
+let dragStartIdx      = -1;
 let dragCurrentIdx = -1;
 let running        = false;
 let finished       = false;
@@ -402,6 +403,7 @@ function render() {
 function handleRelease(wasDrag, releaseIdx) {
   isDragging = false;
   if (wasDrag) {
+    suppressNextClick = true;
     setSelection(getRange(dragStartIdx, releaseIdx));
   } else {
     const clickedIdx = releaseIdx;
@@ -474,6 +476,7 @@ document.addEventListener('mouseup', () => {
 });
 
 document.addEventListener('click', (e) => {
+  if (suppressNextClick) { suppressNextClick = false; return; }
   if (isReplaying || finished || selSet.size === 0) return;
   if (e.target && e.target.closest('.bar')) return;
   setSelection(new Set());
