@@ -316,7 +316,7 @@ function updateDragSelectionFromPoint(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el || !el.classList.contains('bar')) return;
   const idx = Number(el.dataset.idx);
-  if (!Number.isInteger(idx) || idx === dragCurrentIdx) return;
+  if (!Number.isInteger(idx) || idx < 0 || idx >= values.length || idx === dragCurrentIdx) return;
   dragCurrentIdx = idx;
   setSelection(getRange(dragStartIdx, idx));
   render();
