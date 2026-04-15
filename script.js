@@ -205,7 +205,6 @@ function renderHighScores() {
           btn.title = 'Watch replay';
           const r = entry.replay;
           const replaySize = replaySizeBytes(r);
-          btn.dataset.replaySize = String(replaySize);
           const replaySizeField = document.createElement('input');
           replaySizeField.type = 'hidden';
           replaySizeField.className = 'replay-size-field';
@@ -593,10 +592,10 @@ function hidePregameOverlay() {
 }
 
 function startPlay() {
-  if (isReplaying || running || finished) return;
+  if (isReplaying || gameReady || finished) return;
   hidePregameOverlay();
   gameReady = true;
-  startTimer();
+  if (!running) startTimer();
 }
 
 /* ── New game ── */
