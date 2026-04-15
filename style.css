@@ -6,7 +6,7 @@
   --ctrl-bg:      #1a1a2e;
   --ctrl-border:  #0f3460;
   --btn-bg:       #0f3460;
-  --btn-hover:    #e94560;
+  --btn-hover:    #164a88;
   --timer-color:  #4ecca3;
   --hs-bg:        #12122a;
 }
@@ -17,7 +17,7 @@ body.light {
   --ctrl-bg:      #e2e8f0;
   --ctrl-border:  #94a3b8;
   --btn-bg:       #3b82f6;
-  --btn-hover:    #1d4ed8;
+  --btn-hover:    #2563eb;
   --timer-color:  #059669;
   --hs-bg:        #e8edf3;
 }
@@ -95,6 +95,11 @@ body {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
 }
 #settings-btn:hover { background: var(--btn-hover); color: #f0f0f0; border-color: var(--btn-hover); }
+#settings-btn.open {
+  background: var(--btn-bg);
+  color: #f0f0f0;
+  border-color: var(--btn-bg);
+}
 
 #settings-panel {
   display: none;
@@ -326,13 +331,13 @@ body {
 #overlay button {
   padding: 10px 28px;
   font-size: 16px;
-  background: #0f3460;
+  background: var(--btn-bg);
   color: #f0f0f0;
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
-#overlay button:hover, #overlay button:active { background: #e94560; }
+#overlay button:hover, #overlay button:active { background: var(--btn-hover); }
 
 /* Landscape hint for very small screens */
 @media screen and (max-height: 300px) {
