@@ -535,10 +535,6 @@ document.addEventListener('touchend', () => {
 document.addEventListener('touchcancel', () => {
   if (isReplaying) return;
   if (!isDragging) return;
-  if (mouseMoveBound) {
-    document.removeEventListener('mousemove', onMouseDragMove);
-    mouseMoveBound = false;
-  }
   isDragging  = false;
   touchIsDrag = false;
   setSelection(new Set());
