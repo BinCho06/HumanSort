@@ -453,7 +453,6 @@ function buildBars(n) {
       if (finished || isReplaying) return;
       if (e.button !== 0) return; // primary button only
       e.preventDefault();
-      suppressNextDocumentClick = false;
       if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
@@ -497,7 +496,7 @@ document.addEventListener('mouseup', () => {
     mouseMoveBound = false;
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
-  if (wasDrag) suppressNextDocumentClick = true;
+  suppressNextDocumentClick = wasDrag;
   handleRelease(wasDrag, dragCurrentIdx);
 });
 
