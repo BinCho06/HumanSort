@@ -228,7 +228,7 @@ swapBtn.addEventListener('click', () => {
 const MIN_H = 44;
 const ARENA_V_PAD = 6;
 const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a drag
-const CLICK_SUPPRESSION_TIMEOUT_MS = 250;
+const CLICK_SUPPRESSION_WINDOW = 250;
 
 let values         = [];
 let selSet         = new Set();
@@ -498,16 +498,18 @@ document.addEventListener('mouseup', () => {
     mouseMoveBound = false;
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
-  suppressNextDocumentClick = wasDrag;
   if (suppressClickTimeoutId) {
     clearTimeout(suppressClickTimeoutId);
     suppressClickTimeoutId = null;
   }
   if (wasDrag) {
+    suppressNextDocumentClick = true;
     suppressClickTimeoutId = setTimeout(() => {
       suppressNextDocumentClick = false;
       suppressClickTimeoutId = null;
-    }, CLICK_SUPPRESSION_TIMEOUT_MS);
+    }, CLICK_SUPPRESSION_WINDOW);
+  } else {
+    suppressNextDocumentClick = false;
   }
   handleRelease(wasDrag, dragCurrentIdx);
 });
