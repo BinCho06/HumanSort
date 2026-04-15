@@ -228,7 +228,6 @@ swapBtn.addEventListener('click', () => {
 const MIN_H = 44;
 const ARENA_V_PAD = 6;
 const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a drag
-const CLICK_SUPPRESSION_WINDOW = 250;
 
 let values         = [];
 let selSet         = new Set();
@@ -236,8 +235,6 @@ let isDragging     = false;
 let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
-let suppressNextDocumentClick = false;
-let suppressClickTimeoutId = null;
 let running        = false;
 let finished       = false;
 let startMs        = 0;
@@ -453,7 +450,6 @@ function buildBars(n) {
     /* Mouse events */
     bar.addEventListener('mousedown', (e) => {
       if (finished || isReplaying) return;
-      if (e.button !== 0) return; // primary button only
       e.preventDefault();
       if (!running) startTimer();
       isDragging     = true;
@@ -498,31 +494,10 @@ document.addEventListener('mouseup', () => {
     mouseMoveBound = false;
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
-  if (suppressClickTimeoutId) {
-    clearTimeout(suppressClickTimeoutId);
-    suppressClickTimeoutId = null;
-  }
-  if (wasDrag) {
-    suppressNextDocumentClick = true;
-    suppressClickTimeoutId = setTimeout(() => {
-      suppressNextDocumentClick = false;
-      suppressClickTimeoutId = null;
-    }, CLICK_SUPPRESSION_WINDOW);
-  } else {
-    suppressNextDocumentClick = false;
-  }
   handleRelease(wasDrag, dragCurrentIdx);
 });
 
 document.addEventListener('click', (e) => {
-  if (suppressNextDocumentClick) {
-    suppressNextDocumentClick = false;
-    if (suppressClickTimeoutId) {
-      clearTimeout(suppressClickTimeoutId);
-      suppressClickTimeoutId = null;
-    }
-    return;
-  }
   if (isReplaying || finished || selSet.size === 0) return;
   if (e.target && e.target.closest('.bar')) return;
   setSelection(new Set());
