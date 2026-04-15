@@ -249,6 +249,9 @@ let replayInitVals = [];  // snapshot of values[] taken at game start
 let replayEvents   = [];  // recorded events: [absT, action, idx]
 let replayTids     = [];  // setTimeout IDs for active replay
 let isReplaying    = false;
+let replayTickId   = null;
+let replayStartMs  = 0;
+let replayTotalMs  = 0;
 
 /* Record a replay event (no-op before timer starts or after game ends) */
 function recEvent(action, idx) {
@@ -469,6 +472,19 @@ document.addEventListener('mouseup', () => {
   handleRelease(wasDrag, dragCurrentIdx);
 });
 
+document.addEventListener('mousemove', (e) => {
+  if (isReplaying || !isDragging) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el || !el.classList.contains('bar')) return;
+  const bars = Array.from(arena.children);
+  const idx  = bars.indexOf(el);
+  if (idx !== -1 && idx !== dragCurrentIdx) {
+    dragCurrentIdx = idx;
+    setSelection(getRange(dragStartIdx, idx));
+    render();
+  }
+});
+
 document.addEventListener('click', (e) => {
   if (isReplaying || finished || selSet.size === 0) return;
   if (e.target && e.target.closest('.bar')) return;
@@ -538,6 +554,27 @@ function stopTimer() {
   return Date.now() - startMs;
 }
 
+function startReplayTimer(totalMs) {
+  replayTotalMs = totalMs;
+  replayStartMs = Date.now();
+  timerEl.textContent = fmtTime(0);
+  if (replayTickId) clearInterval(replayTickId);
+  replayTickId = setInterval(() => {
+    const elapsed = Math.min(Date.now() - replayStartMs, replayTotalMs);
+    timerEl.textContent = fmtTime(elapsed);
+  }, 100);
+}
+
+function stopReplayTimer(showFinal = true) {
+  if (replayTickId) {
+    clearInterval(replayTickId);
+    replayTickId = null;
+  }
+  if (showFinal) {
+    timerEl.textContent = fmtTime(replayTotalMs);
+  }
+}
+
 /* ── New game ── */
 function newGame() {
   if (isReplaying) {
@@ -546,6 +583,7 @@ function newGame() {
     isReplaying  = false;
     replayBanner.classList.remove('active');
   }
+  stopReplayTimer(false);
 
   const n = selectedCols;
 
@@ -613,6 +651,7 @@ function watchReplay(replay) {
     replayTids.forEach(clearTimeout);
     replayTids = [];
   }
+  stopReplayTimer(false);
   if (tickId) { clearInterval(tickId); tickId = null; }
   running   = false;
   finished  = false;
@@ -633,6 +672,9 @@ function watchReplay(replay) {
   render();
 
   // Schedule each recorded event at its original timestamp
+  const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
+  const lastT = lastEvent ? lastEvent[0] : 0;
+  startReplayTimer(lastT);
   for (const ev of decodedReplay.events) {
     const [t, type, idx] = ev;
     const tid = setTimeout(() => applyReplayEvent(type, [idx]), t);
@@ -640,11 +682,10 @@ function watchReplay(replay) {
   }
 
   // After all events, show the final sorted state
-  const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
-  const lastT = lastEvent ? lastEvent[0] : 0;
   const finTid = setTimeout(() => {
     if (!isReplaying) return;
     finished = true;
+    stopReplayTimer(true);
     render();
   }, lastT + 400);
   replayTids.push(finTid);
@@ -653,6 +694,7 @@ function watchReplay(replay) {
 function stopReplay() {
   replayTids.forEach(clearTimeout);
   replayTids  = [];
+  stopReplayTimer(false);
   isReplaying = false;
   replayBanner.classList.remove('active');
   newGame();
