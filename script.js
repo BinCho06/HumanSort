@@ -230,7 +230,6 @@ let selSet         = new Set();
 let isDragging     = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
-let ctrlDeselect   = -1; // index of bar being ctrl+clicked to deselect, or -1
 let running        = false;
 let finished       = false;
 let startMs        = 0;
@@ -401,7 +400,9 @@ function handleRelease(wasDrag, releaseIdx) {
     const clickedIdx = releaseIdx;
     if (selSet.size > 0) {
       if (selSet.has(clickedIdx)) {
-        setSelection(new Set());
+        const next = new Set(selSet);
+        next.delete(clickedIdx);
+        setSelection(next);
       } else {
         recEvent(inputMode === 'swap' ? ACT_SWAP : ACT_MOVE, clickedIdx);
         applyMove(clickedIdx);
@@ -426,11 +427,6 @@ function buildBars(n) {
     bar.addEventListener('mousedown', (e) => {
       if (finished || isReplaying) return;
       e.preventDefault();
-      // Ctrl+click on a selected bar: deselect it instead of starting a drag
-      if (e.ctrlKey && selSet.has(i)) {
-        ctrlDeselect = i;
-        return;
-      }
       if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
@@ -464,20 +460,16 @@ function buildBars(n) {
 /* ── Document-level mouse events ── */
 document.addEventListener('mouseup', () => {
   if (isReplaying) return;
-  if (ctrlDeselect !== -1) {
-    const next = new Set(selSet);
-    next.delete(ctrlDeselect);
-    setSelection(next);
-    ctrlDeselect   = -1;
-    isDragging     = false;
-    dragStartIdx   = -1;
-    dragCurrentIdx = -1;
-    render();
-    return;
-  }
   if (!isDragging) return;
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   handleRelease(wasDrag, dragCurrentIdx);
+});
+
+document.addEventListener('click', (e) => {
+  if (isReplaying || finished || selSet.size === 0) return;
+  if (e.target && e.target.closest('.bar')) return;
+  setSelection(new Set());
+  render();
 });
 
 /* ── Document-level touch events ── */
