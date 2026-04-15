@@ -311,6 +311,21 @@ function getRange(a, b) {
   return s;
 }
 
+function updateDragSelectionFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el || !el.classList.contains('bar')) return;
+  const idx = Number(el.dataset.idx);
+  if (!Number.isInteger(idx) || idx === dragCurrentIdx) return;
+  dragCurrentIdx = idx;
+  setSelection(getRange(dragStartIdx, idx));
+  render();
+}
+
+function onMouseDragMove(e) {
+  if (isReplaying || !isDragging) return;
+  updateDragSelectionFromPoint(e.clientX, e.clientY);
+}
+
 /* ── Move selected bars to target position (insert mode) ── */
 function moveSelectedTo(targetIdx) {
   if (selSet.size === 0 || selSet.has(targetIdx)) return;
@@ -429,6 +444,7 @@ function buildBars(n) {
   for (let i = 0; i < n; i++) {
     const bar = document.createElement('div');
     bar.className = 'bar';
+    bar.dataset.idx = String(i);
 
     /* Mouse events */
     bar.addEventListener('mousedown', (e) => {
@@ -438,6 +454,8 @@ function buildBars(n) {
       isDragging     = true;
       dragStartIdx   = i;
       dragCurrentIdx = i;
+      document.removeEventListener('mousemove', onMouseDragMove);
+      document.addEventListener('mousemove', onMouseDragMove);
     });
 
     bar.addEventListener('mouseenter', () => {
@@ -468,21 +486,9 @@ function buildBars(n) {
 document.addEventListener('mouseup', () => {
   if (isReplaying) return;
   if (!isDragging) return;
+  document.removeEventListener('mousemove', onMouseDragMove);
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   handleRelease(wasDrag, dragCurrentIdx);
-});
-
-document.addEventListener('mousemove', (e) => {
-  if (isReplaying || !isDragging) return;
-  const el = document.elementFromPoint(e.clientX, e.clientY);
-  if (!el || !el.classList.contains('bar')) return;
-  const bars = Array.from(arena.children);
-  const idx  = bars.indexOf(el);
-  if (idx !== -1 && idx !== dragCurrentIdx) {
-    dragCurrentIdx = idx;
-    setSelection(getRange(dragStartIdx, idx));
-    render();
-  }
 });
 
 document.addEventListener('click', (e) => {
@@ -507,16 +513,7 @@ document.addEventListener('touchmove', (e) => {
     }
   }
 
-  const el = document.elementFromPoint(touch.clientX, touch.clientY);
-  if (el && el.classList.contains('bar')) {
-    const bars = Array.from(arena.children);
-    const idx  = bars.indexOf(el);
-    if (idx !== -1 && idx !== dragCurrentIdx) {
-      dragCurrentIdx = idx;
-      setSelection(getRange(dragStartIdx, idx));
-      render();
-    }
-  }
+  updateDragSelectionFromPoint(touch.clientX, touch.clientY);
 }, { passive: false });
 
 document.addEventListener('touchend', () => {
@@ -532,6 +529,7 @@ document.addEventListener('touchend', () => {
 document.addEventListener('touchcancel', () => {
   if (isReplaying) return;
   if (!isDragging) return;
+  document.removeEventListener('mousemove', onMouseDragMove);
   isDragging  = false;
   touchIsDrag = false;
   setSelection(new Set());
@@ -577,6 +575,7 @@ function stopReplayTimer(showFinal = true) {
 
 /* ── New game ── */
 function newGame() {
+  document.removeEventListener('mousemove', onMouseDragMove);
   if (isReplaying) {
     replayTids.forEach(clearTimeout);
     replayTids   = [];
