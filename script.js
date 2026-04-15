@@ -228,6 +228,7 @@ swapBtn.addEventListener('click', () => {
 const MIN_H = 44;
 const ARENA_V_PAD = 6;
 const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a drag
+const CLICK_SUPPRESSION_TIMEOUT_MS = 250;
 
 let values         = [];
 let selSet         = new Set();
@@ -236,7 +237,7 @@ let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
 let suppressNextDocumentClick = false;
-let suppressClickResetId = null;
+let suppressClickTimeoutId = null;
 let running        = false;
 let finished       = false;
 let startMs        = 0;
@@ -498,15 +499,15 @@ document.addEventListener('mouseup', () => {
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   suppressNextDocumentClick = wasDrag;
-  if (suppressClickResetId) {
-    clearTimeout(suppressClickResetId);
-    suppressClickResetId = null;
+  if (suppressClickTimeoutId) {
+    clearTimeout(suppressClickTimeoutId);
+    suppressClickTimeoutId = null;
   }
   if (wasDrag) {
-    suppressClickResetId = setTimeout(() => {
+    suppressClickTimeoutId = setTimeout(() => {
       suppressNextDocumentClick = false;
-      suppressClickResetId = null;
-    }, 250);
+      suppressClickTimeoutId = null;
+    }, CLICK_SUPPRESSION_TIMEOUT_MS);
   }
   handleRelease(wasDrag, dragCurrentIdx);
 });
@@ -514,9 +515,9 @@ document.addEventListener('mouseup', () => {
 document.addEventListener('click', (e) => {
   if (suppressNextDocumentClick) {
     suppressNextDocumentClick = false;
-    if (suppressClickResetId) {
-      clearTimeout(suppressClickResetId);
-      suppressClickResetId = null;
+    if (suppressClickTimeoutId) {
+      clearTimeout(suppressClickTimeoutId);
+      suppressClickTimeoutId = null;
     }
     return;
   }
