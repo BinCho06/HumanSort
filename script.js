@@ -1,8 +1,11 @@
 /* ── DOM refs ── */
 const arena          = document.getElementById('arena');
+const barsHost       = document.getElementById('bars');
+const pregameOverlay = document.getElementById('pregame-overlay');
 const timerEl        = document.getElementById('timer');
 const overlay        = document.getElementById('overlay');
 const finalTimeEl    = document.getElementById('final-time');
+const playBtn        = document.getElementById('play-btn');
 const diffBtns       = document.querySelectorAll('.diff-btn');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const iconMoon       = document.getElementById('icon-moon');
@@ -131,6 +134,14 @@ function unpackReplay(base64) {
   }
 }
 
+function replaySizeBytes(base64) {
+  try {
+    return base64ToBytes(base64).length;
+  } catch {
+    return 0;
+  }
+}
+
 function loadScores() {
   try {
     const data = JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
@@ -193,8 +204,14 @@ function renderHighScores() {
           btn.textContent = '▶';
           btn.title = 'Watch replay';
           const r = entry.replay;
+          const replaySize = replaySizeBytes(r);
+          const replaySizeField = document.createElement('input');
+          replaySizeField.type = 'hidden';
+          replaySizeField.className = 'replay-size-field';
+          replaySizeField.value = String(replaySize);
           btn.addEventListener('click', () => watchReplay(r));
           div.appendChild(btn);
+          div.appendChild(replaySizeField);
         }
         col.appendChild(div);
       });
@@ -237,6 +254,7 @@ let dragStartIdx      = -1;
 let dragCurrentIdx = -1;
 let running        = false;
 let finished       = false;
+let gameReady      = false;
 let startMs        = 0;
 let tickId         = null;
 
@@ -378,6 +396,7 @@ function applyMove(targetIdx) {
 function checkWin() {
   if (isSorted(values)) {
     finished        = true;
+    gameReady       = false;
     const elapsed   = stopTimer();
     const t         = fmtTime(elapsed);
     timerEl.textContent     = t;
@@ -390,7 +409,7 @@ function checkWin() {
 
 /* ── Render ── */
 function render() {
-  const bars = arena.children;
+  const bars = barsHost.children;
   const step = getStep();
   for (let i = 0; i < bars.length; i++) {
     bars[i].style.height = rankToHeight(values[i], step) + 'px';
@@ -427,7 +446,7 @@ function handleRelease(wasDrag, releaseIdx) {
 
 /* ── Build DOM ── */
 function buildBars(n) {
-  arena.innerHTML = '';
+  barsHost.innerHTML = '';
   for (let i = 0; i < n; i++) {
     const bar = document.createElement('div');
     bar.className = 'bar';
@@ -435,9 +454,8 @@ function buildBars(n) {
 
     /* Mouse events */
     bar.addEventListener('mousedown', (e) => {
-      if (finished || isReplaying) return;
+      if (finished || isReplaying || !gameReady) return;
       e.preventDefault();
-      if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
       dragCurrentIdx = i;
@@ -452,9 +470,8 @@ function buildBars(n) {
 
     /* Touch start */
     bar.addEventListener('touchstart', (e) => {
-      if (finished || isReplaying) return;
+      if (finished || isReplaying || !gameReady) return;
       e.preventDefault();
-      if (!running) startTimer();
       isDragging     = true;
       dragStartIdx   = i;
       dragCurrentIdx = i;
@@ -463,7 +480,7 @@ function buildBars(n) {
       touchIsDrag    = false;
     }, { passive: false });
 
-    arena.appendChild(bar);
+    barsHost.appendChild(bar);
   }
 }
 
@@ -500,7 +517,7 @@ document.addEventListener('touchmove', (e) => {
 
   const el = document.elementFromPoint(touch.clientX, touch.clientY);
   if (el && el.classList.contains('bar')) {
-    const bars = Array.from(arena.children);
+    const bars = Array.from(barsHost.children);
     const idx  = bars.indexOf(el);
     if (idx !== -1 && idx !== dragCurrentIdx) {
       dragCurrentIdx = idx;
@@ -566,6 +583,21 @@ function stopReplayTimer(showFinal = true) {
   }
 }
 
+function showPregameOverlay() {
+  pregameOverlay.classList.add('show');
+}
+
+function hidePregameOverlay() {
+  pregameOverlay.classList.remove('show');
+}
+
+function startPlay() {
+  if (isReplaying || gameReady || finished || running) return;
+  hidePregameOverlay();
+  gameReady = true;
+  if (!running) startTimer();
+}
+
 /* ── New game ── */
 function newGame() {
   if (isReplaying) {
@@ -575,6 +607,7 @@ function newGame() {
     replayBanner.classList.remove('active');
   }
   stopReplayTimer(false);
+  hidePregameOverlay();
 
   const n = selectedCols;
 
@@ -592,6 +625,7 @@ function newGame() {
   dragStartIdx   = -1;
   dragCurrentIdx = -1;
   finished      = false;
+  gameReady     = false;
 
   if (tickId) clearInterval(tickId);
   tickId  = null;
@@ -603,10 +637,11 @@ function newGame() {
 
   buildBars(n);
   requestAnimationFrame(render);
+  showPregameOverlay();
 }
 
 /* ── Control listeners ── */
-document.getElementById('new-game-btn').addEventListener('click', newGame);
+playBtn.addEventListener('click', startPlay);
 document.getElementById('play-again-btn').addEventListener('click', newGame);
 replayStopBtn.addEventListener('click', stopReplay);
 
@@ -646,8 +681,10 @@ function watchReplay(replay) {
   if (tickId) { clearInterval(tickId); tickId = null; }
   running   = false;
   finished  = false;
+  gameReady = false;
   selSet.clear();
   overlay.classList.remove('show');
+  hidePregameOverlay();
   isReplaying = true;
   replayBanner.classList.add('active');
 
