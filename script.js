@@ -232,7 +232,6 @@ const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a d
 let values         = [];
 let selSet         = new Set();
 let isDragging     = false;
-let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
 let running        = false;
@@ -310,21 +309,6 @@ function getRange(a, b) {
   const lo = Math.min(a, b), hi = Math.max(a, b);
   for (let i = lo; i <= hi; i++) s.add(i);
   return s;
-}
-
-function updateDragSelectionFromPoint(x, y) {
-  const el = document.elementFromPoint(x, y);
-  if (!el || !el.classList.contains('bar')) return;
-  const idx = Number(el.dataset.idx);
-  if (!Number.isInteger(idx) || idx < 0 || idx >= values.length || idx === dragCurrentIdx) return;
-  dragCurrentIdx = idx;
-  setSelection(getRange(dragStartIdx, idx));
-  render();
-}
-
-function onMouseDragMove(e) {
-  if (isReplaying || !isDragging) return;
-  updateDragSelectionFromPoint(e.clientX, e.clientY);
 }
 
 /* ── Move selected bars to target position (insert mode) ── */
@@ -455,10 +439,6 @@ function buildBars(n) {
       isDragging     = true;
       dragStartIdx   = i;
       dragCurrentIdx = i;
-      if (!mouseMoveBound) {
-        document.addEventListener('mousemove', onMouseDragMove);
-        mouseMoveBound = true;
-      }
     });
 
     bar.addEventListener('mouseenter', () => {
@@ -489,10 +469,6 @@ function buildBars(n) {
 document.addEventListener('mouseup', () => {
   if (isReplaying) return;
   if (!isDragging) return;
-  if (mouseMoveBound) {
-    document.removeEventListener('mousemove', onMouseDragMove);
-    mouseMoveBound = false;
-  }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   handleRelease(wasDrag, dragCurrentIdx);
 });
@@ -519,7 +495,16 @@ document.addEventListener('touchmove', (e) => {
     }
   }
 
-  updateDragSelectionFromPoint(touch.clientX, touch.clientY);
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  if (el && el.classList.contains('bar')) {
+    const bars = Array.from(arena.children);
+    const idx  = bars.indexOf(el);
+    if (idx !== -1 && idx !== dragCurrentIdx) {
+      dragCurrentIdx = idx;
+      setSelection(getRange(dragStartIdx, idx));
+      render();
+    }
+  }
 }, { passive: false });
 
 document.addEventListener('touchend', () => {
@@ -580,10 +565,6 @@ function stopReplayTimer(showFinal = true) {
 
 /* ── New game ── */
 function newGame() {
-  if (mouseMoveBound) {
-    document.removeEventListener('mousemove', onMouseDragMove);
-    mouseMoveBound = false;
-  }
   if (isReplaying) {
     replayTids.forEach(clearTimeout);
     replayTids   = [];
