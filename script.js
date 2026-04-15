@@ -236,6 +236,7 @@ let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
 let suppressNextDocumentClick = false;
+let suppressClickResetId = null;
 let running        = false;
 let finished       = false;
 let startMs        = 0;
@@ -497,12 +498,26 @@ document.addEventListener('mouseup', () => {
   }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   suppressNextDocumentClick = wasDrag;
+  if (suppressClickResetId) {
+    clearTimeout(suppressClickResetId);
+    suppressClickResetId = null;
+  }
+  if (wasDrag) {
+    suppressClickResetId = setTimeout(() => {
+      suppressNextDocumentClick = false;
+      suppressClickResetId = null;
+    }, 250);
+  }
   handleRelease(wasDrag, dragCurrentIdx);
 });
 
 document.addEventListener('click', (e) => {
   if (suppressNextDocumentClick) {
     suppressNextDocumentClick = false;
+    if (suppressClickResetId) {
+      clearTimeout(suppressClickResetId);
+      suppressClickResetId = null;
+    }
     return;
   }
   if (isReplaying || finished || selSet.size === 0) return;
