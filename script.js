@@ -51,13 +51,92 @@ document.addEventListener('click', () => settingsPanel.classList.remove('open'))
 /* ── High Scores ── */
 const HS_KEY = 'humansort_scores';
 const HS_MAX = 5;
+const ACT_SELECT   = 0;
+const ACT_DESELECT = 1;
+const ACT_MOVE     = 2;
+const ACT_SWAP     = 3;
+
+function bytesToBase64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+function base64ToBytes(base64) {
+  const bin = atob(base64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function packReplay(numBars, init, events) {
+  const out = [numBars & 0xff];
+  for (let i = 0; i < numBars; i++) out.push(init[i] & 0xff);
+
+  let prevT = 0;
+  for (const [tRaw, typeRaw, idxRaw] of events) {
+    const t    = tRaw | 0;
+    const type = typeRaw | 0;
+    const idx  = idxRaw | 0;
+    let delta  = t - prevT;
+    prevT      = t;
+    if (delta < 0) delta = 0;
+    if (delta > 0x7fff) delta = 0x7fff;
+
+    if (delta < 128) {
+      out.push(delta);
+    } else {
+      out.push(0x80 | (delta >> 8));
+      out.push(delta & 0xff);
+    }
+    out.push(((type & 0x03) << 6) | (idx & 0x3f));
+  }
+
+  return bytesToBase64(Uint8Array.from(out));
+}
+
+function unpackReplay(base64) {
+  if (typeof base64 !== 'string' || !base64) return null;
+  try {
+    const bytes = base64ToBytes(base64);
+    if (bytes.length < 1) return null;
+
+    const numBars = bytes[0];
+    if (!numBars || bytes.length < 1 + numBars) return null;
+    const init = Array.from(bytes.slice(1, 1 + numBars));
+
+    const events = [];
+    let t = 0;
+    let off = 1 + numBars;
+    while (off < bytes.length) {
+      const b0 = bytes[off++];
+      let delta = b0;
+      if (b0 & 0x80) {
+        if (off >= bytes.length) return null;
+        delta = ((b0 & 0x7f) << 8) | bytes[off++];
+      }
+      if (off >= bytes.length) return null;
+
+      const action = bytes[off++];
+      t += delta;
+      events.push([t, action >> 6, action & 0x3f]);
+    }
+    return { numBars, init, events };
+  } catch {
+    return null;
+  }
+}
 
 function loadScores() {
   try {
     const data = JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
     // Normalize old format (plain numbers → objects)
     for (const key of ['easy', 'normal', 'hard']) {
-      data[key] = (data[key] || []).map(s => typeof s === 'number' ? { ms: s, replay: null } : s);
+      data[key] = (data[key] || []).map(s => {
+        if (typeof s === 'number') return { ms: s, replay: null };
+        if (!s || typeof s.ms !== 'number') return null;
+        return { ms: s.ms, replay: typeof s.replay === 'string' ? s.replay : null };
+      }).filter(Boolean);
     }
     return data;
   } catch {
@@ -164,17 +243,26 @@ let touchIsDrag = false;
 
 /* ── Replay state ── */
 let replayInitVals = [];  // snapshot of values[] taken at game start
-let replayEvents   = [];  // recorded events: [absT, type, ...args]
-                          //   type 0 = drag-select  args=[lo, hi]
-                          //   type 1 = click-select  args=[idx]
-                          //   type 3 = move          args=[targetIdx, isSwap(0|1), selIndices[]]
+let replayEvents   = [];  // recorded events: [absT, action, idx]
 let replayTids     = [];  // setTimeout IDs for active replay
 let isReplaying    = false;
 
 /* Record a replay event (no-op before timer starts or after game ends) */
-function recEvent(...args) {
+function recEvent(action, idx) {
   if (!startMs || finished) return;
-  replayEvents.push([Date.now() - startMs, ...args]);
+  replayEvents.push([Date.now() - startMs, action, idx]);
+}
+
+function setSelection(nextSet, shouldRecord = true) {
+  if (shouldRecord && !isReplaying) {
+    const deselected = [];
+    const selected   = [];
+    for (const i of selSet) if (!nextSet.has(i)) deselected.push(i);
+    for (const i of nextSet) if (!selSet.has(i)) selected.push(i);
+    deselected.sort((a, b) => a - b).forEach(i => recEvent(ACT_DESELECT, i));
+    selected.sort((a, b) => a - b).forEach(i => recEvent(ACT_SELECT, i));
+  }
+  selSet = nextSet;
 }
 
 /* ── Helpers ── */
@@ -287,7 +375,7 @@ function checkWin() {
     const t         = fmtTime(elapsed);
     timerEl.textContent     = t;
     finalTimeEl.textContent = `Time: ${t}`;
-    const replay = { numBars: values.length, init: replayInitVals, events: replayEvents };
+    const replay = packReplay(values.length, replayInitVals, replayEvents);
     saveScore(selectedDiff, elapsed, replay);
     overlay.classList.add('show');
   }
@@ -308,24 +396,20 @@ function render() {
 function handleRelease(wasDrag, releaseIdx) {
   isDragging = false;
   if (wasDrag) {
-    const lo = Math.min(dragStartIdx, releaseIdx);
-    const hi = Math.max(dragStartIdx, releaseIdx);
-    selSet = getRange(dragStartIdx, releaseIdx);
-    recEvent(0, lo, hi);
+    setSelection(getRange(dragStartIdx, releaseIdx));
   } else {
     const clickedIdx = releaseIdx;
     if (selSet.size > 0) {
       if (selSet.has(clickedIdx)) {
-        selSet.clear();
+        setSelection(new Set());
       } else {
-        recEvent(3, clickedIdx, inputMode === 'swap' ? 1 : 0, Array.from(selSet).sort((a, b) => a - b));
+        recEvent(inputMode === 'swap' ? ACT_SWAP : ACT_MOVE, clickedIdx);
         applyMove(clickedIdx);
-        selSet.clear();
+        setSelection(new Set());
         checkWin();
       }
     } else {
-      selSet = new Set([clickedIdx]);
-      recEvent(1, clickedIdx);
+      setSelection(new Set([clickedIdx]));
     }
   }
   render();
@@ -356,7 +440,7 @@ function buildBars(n) {
     bar.addEventListener('mouseenter', () => {
       if (!isDragging) return;
       dragCurrentIdx = i;
-      selSet = getRange(dragStartIdx, i);
+      setSelection(getRange(dragStartIdx, i));
       render();
     });
 
@@ -381,7 +465,9 @@ function buildBars(n) {
 document.addEventListener('mouseup', () => {
   if (isReplaying) return;
   if (ctrlDeselect !== -1) {
-    selSet.delete(ctrlDeselect);
+    const next = new Set(selSet);
+    next.delete(ctrlDeselect);
+    setSelection(next);
     ctrlDeselect   = -1;
     isDragging     = false;
     dragStartIdx   = -1;
@@ -415,7 +501,7 @@ document.addEventListener('touchmove', (e) => {
     const idx  = bars.indexOf(el);
     if (idx !== -1 && idx !== dragCurrentIdx) {
       dragCurrentIdx = idx;
-      selSet = getRange(dragStartIdx, idx);
+      setSelection(getRange(dragStartIdx, idx));
       render();
     }
   }
@@ -436,7 +522,7 @@ document.addEventListener('touchcancel', () => {
   if (!isDragging) return;
   isDragging  = false;
   touchIsDrag = false;
-  selSet.clear();
+  setSelection(new Set());
   render();
 });
 
@@ -505,15 +591,19 @@ window.addEventListener('resize', render);
 function applyReplayEvent(type, args) {
   if (!isReplaying) return;
   switch (type) {
-    case 0: // drag-select [lo, hi]
-      selSet = getRange(args[0], args[1]);
+    case ACT_SELECT:
+      selSet.add(args[0]);
       break;
-    case 1: // click-select [idx]
-      selSet = new Set([args[0]]);
+    case ACT_DESELECT:
+      selSet.delete(args[0]);
       break;
-    case 3: // move [targetIdx, isSwap, selIndices[]]
-      selSet = new Set(args[2]);
-      inputMode = args[1] ? 'swap' : 'insert';
+    case ACT_MOVE:
+      inputMode = 'insert';
+      applyMove(args[0]);
+      selSet.clear();
+      break;
+    case ACT_SWAP:
+      inputMode = 'swap';
       applyMove(args[0]);
       selSet.clear();
       break;
@@ -535,20 +625,26 @@ function watchReplay(replay) {
   isReplaying = true;
   replayBanner.classList.add('active');
 
+  const decodedReplay = unpackReplay(replay);
+  if (!decodedReplay) {
+    stopReplay();
+    return;
+  }
+
   // Restore initial state
-  values = replay.init.slice();
-  buildBars(replay.numBars);
+  values = decodedReplay.init.slice();
+  buildBars(decodedReplay.numBars);
   render();
 
   // Schedule each recorded event at its original timestamp
-  for (const ev of replay.events) {
-    const [t, type, ...args] = ev;
-    const tid = setTimeout(() => applyReplayEvent(type, args), t);
+  for (const ev of decodedReplay.events) {
+    const [t, type, idx] = ev;
+    const tid = setTimeout(() => applyReplayEvent(type, [idx]), t);
     replayTids.push(tid);
   }
 
   // After all events, show the final sorted state
-  const lastEvent = replay.events[replay.events.length - 1];
+  const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
   const lastT = lastEvent ? lastEvent[0] : 0;
   const finTid = setTimeout(() => {
     if (!isReplaying) return;
