@@ -232,6 +232,7 @@ const TOUCH_DRAG_THRESHOLD = 8; // px – movement beyond this is treated as a d
 let values         = [];
 let selSet         = new Set();
 let isDragging     = false;
+let mouseMoveBound = false;
 let dragStartIdx   = -1;
 let dragCurrentIdx = -1;
 let running        = false;
@@ -454,8 +455,10 @@ function buildBars(n) {
       isDragging     = true;
       dragStartIdx   = i;
       dragCurrentIdx = i;
-      document.removeEventListener('mousemove', onMouseDragMove);
-      document.addEventListener('mousemove', onMouseDragMove);
+      if (!mouseMoveBound) {
+        document.addEventListener('mousemove', onMouseDragMove);
+        mouseMoveBound = true;
+      }
     });
 
     bar.addEventListener('mouseenter', () => {
@@ -486,7 +489,10 @@ function buildBars(n) {
 document.addEventListener('mouseup', () => {
   if (isReplaying) return;
   if (!isDragging) return;
-  document.removeEventListener('mousemove', onMouseDragMove);
+  if (mouseMoveBound) {
+    document.removeEventListener('mousemove', onMouseDragMove);
+    mouseMoveBound = false;
+  }
   const wasDrag = dragCurrentIdx !== dragStartIdx;
   handleRelease(wasDrag, dragCurrentIdx);
 });
@@ -529,7 +535,10 @@ document.addEventListener('touchend', () => {
 document.addEventListener('touchcancel', () => {
   if (isReplaying) return;
   if (!isDragging) return;
-  document.removeEventListener('mousemove', onMouseDragMove);
+  if (mouseMoveBound) {
+    document.removeEventListener('mousemove', onMouseDragMove);
+    mouseMoveBound = false;
+  }
   isDragging  = false;
   touchIsDrag = false;
   setSelection(new Set());
@@ -556,7 +565,7 @@ function startReplayTimer(totalMs) {
   replayTotalMs = totalMs;
   replayStartMs = Date.now();
   timerEl.textContent = fmtTime(0);
-  if (replayTickId) clearInterval(replayTickId);
+  stopReplayTimer(false);
   replayTickId = setInterval(() => {
     const elapsed = Math.min(Date.now() - replayStartMs, replayTotalMs);
     timerEl.textContent = fmtTime(elapsed);
@@ -575,7 +584,10 @@ function stopReplayTimer(showFinal = true) {
 
 /* ── New game ── */
 function newGame() {
-  document.removeEventListener('mousemove', onMouseDragMove);
+  if (mouseMoveBound) {
+    document.removeEventListener('mousemove', onMouseDragMove);
+    mouseMoveBound = false;
+  }
   if (isReplaying) {
     replayTids.forEach(clearTimeout);
     replayTids   = [];
