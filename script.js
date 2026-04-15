@@ -44,9 +44,13 @@ themeToggleBtn.addEventListener('click', () => {
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   settingsPanel.classList.toggle('open');
+  settingsBtn.classList.toggle('open', settingsPanel.classList.contains('open'));
 });
 settingsPanel.addEventListener('click', (e) => e.stopPropagation());
-document.addEventListener('click', () => settingsPanel.classList.remove('open'));
+document.addEventListener('click', () => {
+  settingsPanel.classList.remove('open');
+  settingsBtn.classList.remove('open');
+});
 
 /* ── High Scores ── */
 const HS_KEY = 'humansort_scores';
