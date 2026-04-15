@@ -5,7 +5,7 @@ const pregameOverlay = document.getElementById('pregame-overlay');
 const timerEl        = document.getElementById('timer');
 const overlay        = document.getElementById('overlay');
 const finalTimeEl    = document.getElementById('final-time');
-const newGameBtn     = document.getElementById('new-game-btn');
+const playBtn        = document.getElementById('play-btn');
 const diffBtns       = document.querySelectorAll('.diff-btn');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const iconMoon       = document.getElementById('icon-moon');
@@ -641,7 +641,7 @@ function newGame() {
 }
 
 /* ── Control listeners ── */
-newGameBtn.addEventListener('click', startPlay);
+playBtn.addEventListener('click', startPlay);
 document.getElementById('play-again-btn').addEventListener('click', newGame);
 replayStopBtn.addEventListener('click', stopReplay);
 
