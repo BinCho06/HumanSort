@@ -592,7 +592,7 @@ function hidePregameOverlay() {
 }
 
 function startPlay() {
-  if (isReplaying || gameReady || finished) return;
+  if (isReplaying || gameReady || finished || running) return;
   hidePregameOverlay();
   gameReady = true;
   if (!running) startTimer();

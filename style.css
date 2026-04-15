@@ -248,7 +248,7 @@ body {
   z-index: 5;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--bg) 96%, #000 4%);
+  background: var(--bg);
   padding: 12px;
 }
 #pregame-overlay.show { display: flex; }
