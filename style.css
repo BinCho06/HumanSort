@@ -292,7 +292,17 @@ body {
   margin-bottom: 10px;
 }
 
+#highscores h3:not(:first-child) {
+  margin-top: 12px;
+}
+
 #hs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+#ghs-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
@@ -324,6 +334,18 @@ body {
   font-size: 12px;
   opacity: 0.35;
   font-style: italic;
+}
+
+#change-name-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+#global-status {
+  min-height: 16px;
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.8;
 }
 
 /* ── Replay banner ── */
