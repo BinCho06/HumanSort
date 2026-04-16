@@ -84,28 +84,35 @@
   </div>
 
   <section id="highscores">
-    <h3>🏆 Local High Scores</h3>
-    <div id="hs-grid">
-      <div class="hs-col" id="hs-easy">
-        <div class="hs-col-title">Easy (20)</div>
-      </div>
-      <div class="hs-col" id="hs-normal">
-        <div class="hs-col-title">Normal (30)</div>
-      </div>
-      <div class="hs-col" id="hs-hard">
-        <div class="hs-col-title">Hard (50)</div>
-      </div>
+    <h3>🕒 Recent Games</h3>
+    <div class="hs-col" id="recent-games">
+      <span class="hs-empty">No games yet</span>
     </div>
     <h3>🌍 Global Top 10</h3>
-    <div id="ghs-grid">
-      <div class="hs-col" id="ghs-easy">
+    <div id="global-controls">
+      <label for="global-difficulty-select">Difficulty</label>
+      <select id="global-difficulty-select" aria-label="Select global leaderboard difficulty">
+        <option value="easy">Easy (20)</option>
+        <option value="normal" selected>Normal (30)</option>
+        <option value="hard">Hard (50)</option>
+      </select>
+    </div>
+    <div class="hs-col" id="ghs-selected">
+      <div class="hs-col-title" id="ghs-selected-title">Normal (30)</div>
+    </div>
+    <h3>🎯 Times to Beat</h3>
+    <div id="beat-times-grid">
+      <div class="beat-time-card">
         <div class="hs-col-title">Easy (20)</div>
+        <span class="hs-time" id="beat-easy">—</span>
       </div>
-      <div class="hs-col" id="ghs-normal">
+      <div class="beat-time-card">
         <div class="hs-col-title">Normal (30)</div>
+        <span class="hs-time" id="beat-normal">—</span>
       </div>
-      <div class="hs-col" id="ghs-hard">
+      <div class="beat-time-card">
         <div class="hs-col-title">Hard (50)</div>
+        <span class="hs-time" id="beat-hard">—</span>
       </div>
     </div>
   </section>
