@@ -83,7 +83,9 @@ const ACT_DESELECT = 1;
 const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
 let supabaseClient = null;
-let selectedGlobalDiff = 'normal';
+let selectedGlobalDiff = (globalDifficultySelect && globalDifficultySelect.value in DIFFICULTY_META)
+  ? globalDifficultySelect.value
+  : 'normal';
 let cachedGlobalByDifficulty = { easy: [], normal: [], hard: [] };
 
 function setGlobalStatus(message) {
@@ -205,14 +207,6 @@ function unpackReplay(base64) {
   }
 }
 
-function replaySizeBytes(base64) {
-  try {
-    return base64ToBytes(base64).length;
-  } catch {
-    return 0;
-  }
-}
-
 function loadRecentGames() {
   try {
     const data = JSON.parse(localStorage.getItem(RECENT_GAMES_KEY));
@@ -220,8 +214,8 @@ function loadRecentGames() {
     return data
       .map((entry) => {
         if (!entry || typeof entry.ms !== 'number') return null;
-        const diff = typeof entry.diff === 'string' ? entry.diff : 'normal';
-        if (!(diff in DIFFICULTY_META)) return null;
+        const diff = entry.diff;
+        if (typeof diff !== 'string' || !(diff in DIFFICULTY_META)) return null;
         return {
           diff,
           ms: entry.ms,
@@ -239,8 +233,8 @@ function loadRecentGames() {
 function saveRecentGame(diff, ms, replay) {
   const games = loadRecentGames();
   games.unshift({ diff, ms, replay, ts: Date.now() });
-  const trimmed = games.slice(0, RECENT_GAMES_MAX);
-  localStorage.setItem(RECENT_GAMES_KEY, JSON.stringify(trimmed));
+  const limitedGames = games.slice(0, RECENT_GAMES_MAX);
+  localStorage.setItem(RECENT_GAMES_KEY, JSON.stringify(limitedGames));
   renderRecentGames();
 }
 
@@ -271,14 +265,8 @@ function renderRecentGames() {
       btn.textContent = '▶';
       btn.title = 'Watch replay';
       const r = entry.replay;
-      const replaySize = replaySizeBytes(r);
-      const replaySizeField = document.createElement('input');
-      replaySizeField.type = 'hidden';
-      replaySizeField.className = 'replay-size-field';
-      replaySizeField.value = String(replaySize);
       btn.addEventListener('click', () => watchReplay(r));
       div.appendChild(btn);
-      div.appendChild(replaySizeField);
     }
     recentGamesEl.appendChild(div);
   });
@@ -333,7 +321,7 @@ function renderBeatTimes() {
     const el = map[diff];
     if (!el) continue;
     const best = cachedGlobalByDifficulty[diff][0];
-    el.textContent = best ? fmtTime(Number(best.score_ms) || 0) : '--:--.-';
+    el.textContent = best ? fmtTime(Number(best.score_ms) || 0) : '—';
   }
 }
 
