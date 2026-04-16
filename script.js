@@ -17,6 +17,8 @@ const swapBtn        = document.getElementById('swap-btn');
 const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
+const changeNameBtn  = document.getElementById('change-name-btn');
+const globalStatusEl = document.getElementById('global-status');
 
 /* ── Difficulty state ── */
 let selectedCols = 30;
@@ -57,11 +59,64 @@ document.addEventListener('click', () => {
 
 /* ── High Scores ── */
 const HS_KEY = 'humansort_scores';
+const HS_NAME_KEY = 'humansort_player_name';
 const HS_MAX = 5;
+const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
+const SUPABASE_URL = 'https://ruwcxfppupahnzvzqrej.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_nOH2b9CC7gP875w8XUel8A_7v5x7hkA';
 const ACT_SELECT   = 0;
 const ACT_DESELECT = 1;
 const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
+let supabaseClient = null;
+
+function setGlobalStatus(message) {
+  if (!globalStatusEl) return;
+  globalStatusEl.textContent = message || '';
+}
+
+function getStoredPlayerName() {
+  try {
+    const raw = localStorage.getItem(HS_NAME_KEY);
+    if (!raw) return '';
+    return raw.trim().slice(0, 20);
+  } catch {
+    return '';
+  }
+}
+
+function setStoredPlayerName(name) {
+  const clean = (name || '').trim().slice(0, 20);
+  if (!clean) return '';
+  try {
+    localStorage.setItem(HS_NAME_KEY, clean);
+  } catch {
+    // ignore localStorage failures
+  }
+  return clean;
+}
+
+function promptForPlayerName(initialValue = '') {
+  const raw = window.prompt('Enter your global leaderboard name (max 20 chars):', initialValue);
+  if (raw === null) return '';
+  const clean = raw.trim().slice(0, 20);
+  if (!clean) return '';
+  return setStoredPlayerName(clean);
+}
+
+function getOrPromptPlayerName() {
+  const existing = getStoredPlayerName();
+  if (existing) return existing;
+  return promptForPlayerName('');
+}
+
+if (changeNameBtn) {
+  changeNameBtn.addEventListener('click', () => {
+    const current = getStoredPlayerName();
+    const next = promptForPlayerName(current);
+    if (next) setGlobalStatus(`Global name set to: ${next}`);
+  });
+}
 
 function bytesToBase64(bytes) {
   let bin = '';
@@ -217,6 +272,128 @@ function renderHighScores() {
       });
     }
   }
+}
+
+function renderGlobalColumn(colId, list) {
+  const col = document.getElementById(colId);
+  if (!col) return;
+  col.replaceChildren(col.firstElementChild);
+  if (!list || list.length === 0) {
+    const empty = document.createElement('span');
+    empty.className = 'hs-empty';
+    empty.textContent = 'No scores yet';
+    col.appendChild(empty);
+    return;
+  }
+  list.forEach((entry, i) => {
+    const div = document.createElement('div');
+    div.className = 'hs-entry';
+    const rank = document.createElement('span');
+    rank.className = 'hs-rank';
+    rank.textContent = `#${i + 1}`;
+    const name = document.createElement('span');
+    name.textContent = (entry.player_name || 'Anonymous').slice(0, 20);
+    const time = document.createElement('span');
+    time.className = 'hs-time';
+    time.textContent = fmtTime(Number(entry.score_ms) || 0);
+    div.appendChild(rank);
+    div.appendChild(name);
+    div.appendChild(time);
+    if (entry.replay_data) {
+      const btn = document.createElement('button');
+      btn.className = 'hs-replay-btn';
+      btn.textContent = '▶';
+      btn.title = 'Watch replay';
+      btn.addEventListener('click', () => watchReplay(entry.replay_data));
+      div.appendChild(btn);
+    }
+    col.appendChild(div);
+  });
+}
+
+async function refreshGlobalLeaderboards() {
+  if (!supabaseClient) {
+    renderGlobalColumn('ghs-easy', []);
+    renderGlobalColumn('ghs-normal', []);
+    renderGlobalColumn('ghs-hard', []);
+    return;
+  }
+  try {
+    const difficulties = ['easy', 'normal', 'hard'];
+    const results = await Promise.all(difficulties.map(async (difficulty) => {
+      const { data, error } = await supabaseClient
+        .from(GLOBAL_LEADERBOARD_TABLE)
+        .select('player_name,difficulty,score_ms,replay_data,created_at')
+        .eq('difficulty', difficulty)
+        .order('score_ms', { ascending: true })
+        .order('created_at', { ascending: true })
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    }));
+    renderGlobalColumn('ghs-easy', results[0]);
+    renderGlobalColumn('ghs-normal', results[1]);
+    renderGlobalColumn('ghs-hard', results[2]);
+  } catch (err) {
+    setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
+  }
+}
+
+function initSupabaseClient() {
+  if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+    setGlobalStatus('Global leaderboard unavailable offline');
+    return;
+  }
+  try {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } catch (err) {
+    setGlobalStatus(`Supabase init failed: ${err.message || 'Unknown error'}`);
+  }
+}
+
+async function ensureSupabaseSession() {
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+    if (!data.session) {
+      const { error: signInError } = await supabaseClient.auth.signInAnonymously();
+      if (signInError) throw signInError;
+    }
+  } catch (err) {
+    setGlobalStatus(`Global auth unavailable: ${err.message || 'Unknown error'}`);
+  }
+}
+
+async function submitGlobalScore(diff, ms, replay) {
+  if (!supabaseClient) return;
+  const playerName = getOrPromptPlayerName();
+  if (!playerName) {
+    setGlobalStatus('Global submit skipped (name required)');
+    return;
+  }
+  try {
+    const { error } = await supabaseClient.rpc('submit_score', {
+      p_player_name: playerName,
+      p_difficulty: diff,
+      p_score_ms: Math.round(ms),
+      p_replay_data: replay
+    });
+    if (error) {
+      setGlobalStatus(`Global submit failed: ${error.message}`);
+      return;
+    }
+    setGlobalStatus('Global score submitted');
+    refreshGlobalLeaderboards();
+  } catch (err) {
+    setGlobalStatus(`Global submit failed: ${err.message || 'Unknown error'}`);
+  }
+}
+
+async function initGlobalFeatures() {
+  initSupabaseClient();
+  await ensureSupabaseSession();
+  await refreshGlobalLeaderboards();
 }
 
 /* ── Move mode ── */
@@ -403,6 +580,7 @@ function checkWin() {
     finalTimeEl.textContent = `Time: ${t}`;
     const replay = packReplay(values.length, replayInitVals, replayEvents);
     saveScore(selectedDiff, elapsed, replay);
+    submitGlobalScore(selectedDiff, elapsed, replay);
     overlay.classList.add('show');
   }
 }
@@ -730,4 +908,5 @@ function stopReplay() {
 
 /* ── Boot ── */
 renderHighScores();
+initGlobalFeatures();
 newGame();
