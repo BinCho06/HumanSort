@@ -19,6 +19,12 @@ const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
 const changeNameBtn  = document.getElementById('change-name-btn');
 const globalStatusEl = document.getElementById('global-status');
+const recentGamesEl  = document.getElementById('recent-games');
+const globalDifficultySelect = document.getElementById('global-difficulty-select');
+const globalSelectedTitleEl = document.getElementById('ghs-selected-title');
+const beatEasyEl = document.getElementById('beat-easy');
+const beatNormalEl = document.getElementById('beat-normal');
+const beatHardEl = document.getElementById('beat-hard');
 
 /* ── Difficulty state ── */
 let selectedCols = 30;
@@ -58,12 +64,18 @@ document.addEventListener('click', () => {
 });
 
 /* ── High Scores ── */
-const HS_KEY = 'humansort_scores';
+const RECENT_GAMES_KEY = 'humansort_recent_games';
 const HS_NAME_KEY = 'humansort_player_name';
-const HS_MAX = 5;
+const RECENT_GAMES_MAX = 20;
+const RECENT_GAMES_RENDER_MAX = 10;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
+const DIFFICULTY_META = {
+  easy: { label: 'Easy', cols: 20 },
+  normal: { label: 'Normal', cols: 30 },
+  hard: { label: 'Hard', cols: 50 }
+};
 const SUPABASE_URL = 'https://ruwcxfppupahnzvzqrej.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1d2N4ZnBwdXBhaG56dnpxcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNjE2NDIsImV4cCI6MjA5MTkzNzY0Mn0.Z37HqSTx9O0vFaQMZrzRkQhaUTXyf4D5ZCAVtMxZs-E';
 const ACT_SELECT   = 0;
@@ -71,6 +83,8 @@ const ACT_DESELECT = 1;
 const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
 let supabaseClient = null;
+let selectedGlobalDiff = 'normal';
+let cachedGlobalByDifficulty = { easy: [], normal: [], hard: [] };
 
 function setGlobalStatus(message) {
   if (!globalStatusEl) return;
@@ -199,87 +213,83 @@ function replaySizeBytes(base64) {
   }
 }
 
-function loadScores() {
+function loadRecentGames() {
   try {
-    const data = JSON.parse(localStorage.getItem(HS_KEY)) || { easy: [], normal: [], hard: [] };
-    // Normalize old format (plain numbers → objects)
-    for (const key of ['easy', 'normal', 'hard']) {
-      data[key] = (data[key] || []).map(s => {
-        if (typeof s === 'number') return { ms: s, replay: null };
-        if (!s || typeof s.ms !== 'number') return null;
-        return { ms: s.ms, replay: typeof s.replay === 'string' ? s.replay : null };
-      }).filter(Boolean);
-    }
-    return data;
+    const data = JSON.parse(localStorage.getItem(RECENT_GAMES_KEY));
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((entry) => {
+        if (!entry || typeof entry.ms !== 'number') return null;
+        const diff = typeof entry.diff === 'string' ? entry.diff : 'normal';
+        if (!(diff in DIFFICULTY_META)) return null;
+        return {
+          diff,
+          ms: entry.ms,
+          replay: typeof entry.replay === 'string' ? entry.replay : null,
+          ts: typeof entry.ts === 'number' ? entry.ts : Date.now()
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.ts - a.ts);
   } catch {
-    // localStorage may be unavailable or contain corrupt data; start fresh
-    return { easy: [], normal: [], hard: [] };
+    return [];
   }
 }
 
-function saveScore(diff, ms, replay) {
-  const scores = loadScores();
-  scores[diff] = scores[diff] || [];
-  scores[diff].push({ ms, replay });
-  scores[diff].sort((a, b) => a.ms - b.ms);
-  scores[diff] = scores[diff].slice(0, HS_MAX);
-  localStorage.setItem(HS_KEY, JSON.stringify(scores));
-  renderHighScores();
+function saveRecentGame(diff, ms, replay) {
+  const games = loadRecentGames();
+  games.unshift({ diff, ms, replay, ts: Date.now() });
+  const trimmed = games.slice(0, RECENT_GAMES_MAX);
+  localStorage.setItem(RECENT_GAMES_KEY, JSON.stringify(trimmed));
+  renderRecentGames();
 }
 
-function renderHighScores() {
-  const scores = loadScores();
-  const diffs = [
-    { key: 'easy',   id: 'hs-easy',   label: 'Easy (20)' },
-    { key: 'normal', id: 'hs-normal', label: 'Normal (30)' },
-    { key: 'hard',   id: 'hs-hard',   label: 'Hard (50)' },
-  ];
-  for (const d of diffs) {
-    const col = document.getElementById(d.id);
-    col.replaceChildren(col.firstElementChild);
-    const list = scores[d.key] || [];
-    if (list.length === 0) {
-      const empty = document.createElement('span');
-      empty.className = 'hs-empty';
-      empty.textContent = 'No scores yet';
-      col.appendChild(empty);
-    } else {
-      list.forEach((entry, i) => {
-        const div = document.createElement('div');
-        div.className = 'hs-entry';
-        const rank = document.createElement('span');
-        rank.className = 'hs-rank';
-        rank.textContent = `#${i + 1}`;
-        const time = document.createElement('span');
-        time.className = 'hs-time';
-        time.textContent = fmtTime(entry.ms);
-        div.appendChild(rank);
-        div.appendChild(time);
-        if (entry.replay) {
-          const btn = document.createElement('button');
-          btn.className = 'hs-replay-btn';
-          btn.textContent = '▶';
-          btn.title = 'Watch replay';
-          const r = entry.replay;
-          const replaySize = replaySizeBytes(r);
-          const replaySizeField = document.createElement('input');
-          replaySizeField.type = 'hidden';
-          replaySizeField.className = 'replay-size-field';
-          replaySizeField.value = String(replaySize);
-          btn.addEventListener('click', () => watchReplay(r));
-          div.appendChild(btn);
-          div.appendChild(replaySizeField);
-        }
-        col.appendChild(div);
-      });
+function renderRecentGames() {
+  if (!recentGamesEl) return;
+  recentGamesEl.innerHTML = '';
+  const games = loadRecentGames().slice(0, RECENT_GAMES_RENDER_MAX);
+  if (games.length === 0) {
+    const empty = document.createElement('span');
+    empty.className = 'hs-empty';
+    empty.textContent = 'No games yet';
+    recentGamesEl.appendChild(empty);
+    return;
+  }
+  games.forEach((entry) => {
+    const div = document.createElement('div');
+    div.className = 'hs-entry';
+    const diff = document.createElement('span');
+    diff.textContent = `${DIFFICULTY_META[entry.diff].label}:`;
+    const time = document.createElement('span');
+    time.className = 'hs-time';
+    time.textContent = fmtTime(entry.ms);
+    div.appendChild(diff);
+    div.appendChild(time);
+    if (entry.replay) {
+      const btn = document.createElement('button');
+      btn.className = 'hs-replay-btn';
+      btn.textContent = '▶';
+      btn.title = 'Watch replay';
+      const r = entry.replay;
+      const replaySize = replaySizeBytes(r);
+      const replaySizeField = document.createElement('input');
+      replaySizeField.type = 'hidden';
+      replaySizeField.className = 'replay-size-field';
+      replaySizeField.value = String(replaySize);
+      btn.addEventListener('click', () => watchReplay(r));
+      div.appendChild(btn);
+      div.appendChild(replaySizeField);
     }
-  }
+    recentGamesEl.appendChild(div);
+  });
 }
 
-function renderGlobalColumn(colId, list) {
-  const col = document.getElementById(colId);
-  if (!col) return;
-  col.replaceChildren(col.firstElementChild);
+function renderGlobalSelectedColumn(list) {
+  const col = document.getElementById('ghs-selected');
+  if (!col || !globalSelectedTitleEl) return;
+  const meta = DIFFICULTY_META[selectedGlobalDiff] || DIFFICULTY_META.normal;
+  globalSelectedTitleEl.textContent = `${meta.label} (${meta.cols})`;
+  col.replaceChildren(globalSelectedTitleEl);
   if (!list || list.length === 0) {
     const empty = document.createElement('span');
     empty.className = 'hs-empty';
@@ -313,11 +323,30 @@ function renderGlobalColumn(colId, list) {
   });
 }
 
+function renderBeatTimes() {
+  const map = {
+    easy: beatEasyEl,
+    normal: beatNormalEl,
+    hard: beatHardEl
+  };
+  for (const diff of Object.keys(map)) {
+    const el = map[diff];
+    if (!el) continue;
+    const best = cachedGlobalByDifficulty[diff][0];
+    el.textContent = best ? fmtTime(Number(best.score_ms) || 0) : '--:--.-';
+  }
+}
+
+function renderGlobalLeaderboardBySelectedDifficulty() {
+  const list = cachedGlobalByDifficulty[selectedGlobalDiff] || [];
+  renderGlobalSelectedColumn(list);
+  renderBeatTimes();
+}
+
 async function refreshGlobalLeaderboards() {
   if (!supabaseClient) {
-    renderGlobalColumn('ghs-easy', []);
-    renderGlobalColumn('ghs-normal', []);
-    renderGlobalColumn('ghs-hard', []);
+    cachedGlobalByDifficulty = { easy: [], normal: [], hard: [] };
+    renderGlobalLeaderboardBySelectedDifficulty();
     return;
   }
   try {
@@ -337,9 +366,8 @@ async function refreshGlobalLeaderboards() {
       if (byDifficulty[key].length >= GLOBAL_LEADERBOARD_MAX_ENTRIES) continue;
       byDifficulty[key].push(row);
     }
-    renderGlobalColumn('ghs-easy', byDifficulty.easy);
-    renderGlobalColumn('ghs-normal', byDifficulty.normal);
-    renderGlobalColumn('ghs-hard', byDifficulty.hard);
+    cachedGlobalByDifficulty = byDifficulty;
+    renderGlobalLeaderboardBySelectedDifficulty();
   } catch (err) {
     setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
   }
@@ -585,7 +613,7 @@ function checkWin() {
     timerEl.textContent     = t;
     finalTimeEl.textContent = `Time: ${t}`;
     const replay = packReplay(values.length, replayInitVals, replayEvents);
-    saveScore(selectedDiff, elapsed, replay);
+    saveRecentGame(selectedDiff, elapsed, replay);
     submitGlobalScore(selectedDiff, elapsed, replay);
     overlay.classList.add('show');
   }
@@ -828,6 +856,14 @@ function newGame() {
 playBtn.addEventListener('click', startPlay);
 document.getElementById('play-again-btn').addEventListener('click', newGame);
 replayStopBtn.addEventListener('click', stopReplay);
+if (globalDifficultySelect) {
+  globalDifficultySelect.addEventListener('change', () => {
+    const next = globalDifficultySelect.value;
+    if (!(next in DIFFICULTY_META)) return;
+    selectedGlobalDiff = next;
+    renderGlobalLeaderboardBySelectedDifficulty();
+  });
+}
 
 window.addEventListener('resize', render);
 
@@ -913,6 +949,6 @@ function stopReplay() {
 }
 
 /* ── Boot ── */
-renderHighScores();
+renderRecentGames();
 initGlobalFeatures();
 newGame();
