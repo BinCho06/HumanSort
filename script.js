@@ -61,6 +61,8 @@ document.addEventListener('click', () => {
 const HS_KEY = 'humansort_scores';
 const HS_NAME_KEY = 'humansort_player_name';
 const HS_MAX = 5;
+const MAX_PLAYER_NAME_LENGTH = 20;
+const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
 const SUPABASE_URL = 'https://ruwcxfppupahnzvzqrej.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_nOH2b9CC7gP875w8XUel8A_7v5x7hkA';
@@ -79,14 +81,14 @@ function getStoredPlayerName() {
   try {
     const raw = localStorage.getItem(HS_NAME_KEY);
     if (!raw) return '';
-    return raw.trim().slice(0, 20);
+    return raw.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
   } catch {
     return '';
   }
 }
 
 function setStoredPlayerName(name) {
-  const clean = (name || '').trim().slice(0, 20);
+  const clean = (name || '').trim().slice(0, MAX_PLAYER_NAME_LENGTH);
   if (!clean) return '';
   try {
     localStorage.setItem(HS_NAME_KEY, clean);
@@ -97,9 +99,9 @@ function setStoredPlayerName(name) {
 }
 
 function promptForPlayerName(initialValue = '') {
-  const raw = window.prompt('Enter your global leaderboard name (max 20 chars):', initialValue);
+  const raw = window.prompt(`Enter your global leaderboard name (max ${MAX_PLAYER_NAME_LENGTH} chars):`, initialValue);
   if (raw === null) return '';
-  const clean = raw.trim().slice(0, 20);
+  const clean = raw.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
   if (!clean) return '';
   return setStoredPlayerName(clean);
 }
@@ -292,7 +294,7 @@ function renderGlobalColumn(colId, list) {
     rank.className = 'hs-rank';
     rank.textContent = `#${i + 1}`;
     const name = document.createElement('span');
-    name.textContent = (entry.player_name || 'Anonymous').slice(0, 20);
+    name.textContent = (entry.player_name || 'Anonymous').slice(0, MAX_PLAYER_NAME_LENGTH);
     const time = document.createElement('span');
     time.className = 'hs-time';
     time.textContent = fmtTime(Number(entry.score_ms) || 0);
@@ -320,20 +322,24 @@ async function refreshGlobalLeaderboards() {
   }
   try {
     const difficulties = ['easy', 'normal', 'hard'];
-    const results = await Promise.all(difficulties.map(async (difficulty) => {
-      const { data, error } = await supabaseClient
-        .from(GLOBAL_LEADERBOARD_TABLE)
-        .select('player_name,difficulty,score_ms,replay_data,created_at')
-        .eq('difficulty', difficulty)
-        .order('score_ms', { ascending: true })
-        .order('created_at', { ascending: true })
-        .limit(10);
-      if (error) throw error;
-      return data || [];
-    }));
-    renderGlobalColumn('ghs-easy', results[0]);
-    renderGlobalColumn('ghs-normal', results[1]);
-    renderGlobalColumn('ghs-hard', results[2]);
+    const { data, error } = await supabaseClient
+      .from(GLOBAL_LEADERBOARD_TABLE)
+      .select('player_name,difficulty,score_ms,replay_data,created_at')
+      .in('difficulty', difficulties)
+      .order('score_ms', { ascending: true })
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const byDifficulty = { easy: [], normal: [], hard: [] };
+    for (const row of data || []) {
+      const key = row.difficulty;
+      if (!(key in byDifficulty)) continue;
+      if (byDifficulty[key].length >= GLOBAL_LEADERBOARD_MAX_ENTRIES) continue;
+      byDifficulty[key].push(row);
+    }
+    renderGlobalColumn('ghs-easy', byDifficulty.easy);
+    renderGlobalColumn('ghs-normal', byDifficulty.normal);
+    renderGlobalColumn('ghs-hard', byDifficulty.hard);
   } catch (err) {
     setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
   }
