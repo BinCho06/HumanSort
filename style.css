@@ -347,6 +347,38 @@ body {
   opacity: 0.8;
 }
 
+#name-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#name-editor[hidden] {
+  display: none;
+}
+
+#name-input {
+  width: 100%;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--color);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+#name-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+#name-save-btn,
+#name-cancel-btn {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
 /* ── Replay banner ── */
 #replay-banner {
   display: none;
@@ -404,4 +436,10 @@ body {
 @media screen and (max-height: 300px) {
   #controls { padding: 3px 8px; gap: 4px 10px; }
   #timer { font-size: 14px; }
+}
+
+@media screen and (max-width: 700px) {
+  #ghs-grid {
+    grid-template-columns: 1fr;
+  }
 }
