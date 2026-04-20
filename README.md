@@ -1,6 +1,21 @@
 # HumanSort
 A site where you compete to be the fastest manual sorter
 
+## Game
+
+- Choose a difficulty: Easy (20), Normal (30), or Hard (50) columns.
+- Press **Play** to reveal the shuffled board and start the timer.
+- Sort the bars in ascending order as fast as possible using:
+  - **Insert mode** (move selected bars into a target position), or
+  - **Swap mode** (swap selected bars with a target bar).
+- When sorted, your finish time is shown and saved to local high scores.
+
+## Leaderboards
+
+- **Local High Scores**: top 3 times per difficulty, stored in your browser.
+- **Global Top 10**: online leaderboard per difficulty with replay buttons.
+- Global identity checks for “your score” are based on your anonymous auth user ID (not player name), so duplicate names are handled correctly.
+
 ## Storage & Replay Format
 
 Replays are stored in `localStorage` as a compact Base64 string (`btoa`/`atob`) instead of verbose JSON.
