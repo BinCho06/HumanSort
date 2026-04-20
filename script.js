@@ -23,6 +23,10 @@ const nameInputEl    = document.getElementById('name-input');
 const nameSaveBtn    = document.getElementById('name-save-btn');
 const nameCancelBtn  = document.getElementById('name-cancel-btn');
 const globalStatusEl = document.getElementById('global-status');
+const nameModalEl    = document.getElementById('name-modal');
+const nameModalInputEl = document.getElementById('name-modal-input');
+const nameModalSaveBtn = document.getElementById('name-modal-save-btn');
+const nameModalSkipBtn = document.getElementById('name-modal-skip-btn');
 
 /* ── Difficulty state ── */
 let selectedCols = 30;
@@ -131,11 +135,41 @@ function saveNameFromEditor() {
   return saved;
 }
 
-function getOrPromptPlayerName() {
+let resolveNameModal = null;
+
+function closeNameModal() {
+  if (!nameModalEl || !nameModalInputEl) return;
+  nameModalEl.classList.remove('show');
+  nameModalEl.setAttribute('aria-hidden', 'true');
+  nameModalInputEl.blur();
+}
+
+function showNameModal(initialValue = '') {
+  if (!nameModalEl || !nameModalInputEl) return;
+  nameModalInputEl.value = initialValue.slice(0, MAX_PLAYER_NAME_LENGTH);
+  nameModalEl.classList.add('show');
+  nameModalEl.setAttribute('aria-hidden', 'false');
+  nameModalInputEl.focus();
+  nameModalInputEl.select();
+}
+
+function resolveNameModalWith(value = '') {
+  if (typeof resolveNameModal !== 'function') return;
+  const resolver = resolveNameModal;
+  resolveNameModal = null;
+  closeNameModal();
+  resolver(value);
+}
+
+function requestPlayerNameModal() {
   const existing = getStoredPlayerName();
-  if (existing) return existing;
-  openNameEditor('');
-  return '';
+  if (existing) return Promise.resolve(existing);
+  if (!nameModalEl || !nameModalInputEl) return Promise.resolve('');
+  if (typeof resolveNameModal === 'function') return Promise.resolve('');
+  showNameModal('');
+  return new Promise((resolve) => {
+    resolveNameModal = resolve;
+  });
 }
 
 if (changeNameBtn) {
@@ -165,6 +199,36 @@ if (nameInputEl) {
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeNameEditor();
+    }
+  });
+}
+
+if (nameModalSaveBtn && nameModalInputEl) {
+  nameModalSaveBtn.addEventListener('click', () => {
+    const clean = nameModalInputEl.value.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
+    if (!clean) return;
+    const saved = setStoredPlayerName(clean);
+    resolveNameModalWith(saved);
+  });
+}
+
+if (nameModalSkipBtn) {
+  nameModalSkipBtn.addEventListener('click', () => {
+    resolveNameModalWith('');
+  });
+}
+
+if (nameModalInputEl) {
+  nameModalInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const clean = nameModalInputEl.value.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
+      if (!clean) return;
+      const saved = setStoredPlayerName(clean);
+      resolveNameModalWith(saved);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      resolveNameModalWith('');
     }
   });
 }
@@ -563,7 +627,7 @@ async function ensureSupabaseSession() {
 
 async function submitGlobalScore(diff, ms, replay) {
   if (!supabaseClient) return;
-  const playerName = getOrPromptPlayerName();
+  const playerName = await requestPlayerNameModal();
   if (!playerName) {
     setGlobalStatus('Global submit skipped (name required)');
     return;
@@ -630,6 +694,7 @@ let finished       = false;
 let gameReady      = false;
 let startMs        = 0;
 let tickId         = null;
+let postWinTid     = null;
 
 /* Touch drag-detection state */
 let touchStartX = 0;
@@ -777,7 +842,9 @@ function checkWin() {
     const replay = packReplay(values.length, replayInitVals, replayEvents);
     saveScore(selectedDiff, elapsed, replay);
     submitGlobalScore(selectedDiff, elapsed, replay);
+    overlay.classList.remove('fade-out');
     overlay.classList.add('show');
+    scheduleReturnToPregame();
   }
 }
 
@@ -936,6 +1003,14 @@ function stopTimer() {
   return Date.now() - startMs;
 }
 
+function scheduleReturnToPregame() {
+  if (postWinTid) clearTimeout(postWinTid);
+  postWinTid = setTimeout(() => {
+    overlay.classList.add('fade-out');
+    setTimeout(newGame, 350);
+  }, 2000);
+}
+
 function startReplayTimer(totalMs) {
   replayTotalMs = totalMs;
   replayStartMs = Date.now();
@@ -967,6 +1042,7 @@ function hidePregameOverlay() {
 
 function startPlay() {
   if (isReplaying || gameReady || finished || running) return;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   hidePregameOverlay();
   gameReady = true;
   if (!running) startTimer();
@@ -974,6 +1050,10 @@ function startPlay() {
 
 /* ── New game ── */
 function newGame() {
+  if (postWinTid) {
+    clearTimeout(postWinTid);
+    postWinTid = null;
+  }
   if (isReplaying) {
     replayTids.forEach(clearTimeout);
     replayTids   = [];
@@ -1007,6 +1087,7 @@ function newGame() {
   startMs = 0;
 
   timerEl.textContent  = '00:00.0';
+  overlay.classList.remove('fade-out');
   overlay.classList.remove('show');
 
   buildBars(n);
@@ -1016,7 +1097,6 @@ function newGame() {
 
 /* ── Control listeners ── */
 playBtn.addEventListener('click', startPlay);
-document.getElementById('play-again-btn').addEventListener('click', newGame);
 replayStopBtn.addEventListener('click', stopReplay);
 
 window.addEventListener('resize', render);
