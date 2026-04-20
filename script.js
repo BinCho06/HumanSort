@@ -393,7 +393,7 @@ function renderHighScores() {
 
 function isCurrentPlayerEntry(entry, currentUserId) {
   if (!currentUserId) return false;
-  return (entry && entry.user_id) === currentUserId;
+  return Boolean(entry) && entry.user_id === currentUserId;
 }
 
 function getGlobalReplayCacheKey(entry) {

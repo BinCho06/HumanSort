@@ -14,7 +14,7 @@ A site where you compete to be the fastest manual sorter
 
 - **Local High Scores**: top 3 times per difficulty, stored in your browser.
 - **Global Top 10**: online leaderboard per difficulty with replay buttons.
-- Global identity checks for “your score” are based on your anonymous auth user ID (not player name), so duplicate names are handled correctly.
+- Your scores are tracked separately even when other players use the same displayed name.
 
 ## Storage & Replay Format
 
