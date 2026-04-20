@@ -337,7 +337,8 @@ function isCurrentPlayerEntry(entry, currentPlayerName) {
 }
 
 function getGlobalReplayCacheKey(entry) {
-  return `${entry.difficulty || ''}|${entry.player_name || ''}|${Number(entry.score_ms) || 0}|${entry.created_at || ''}`;
+  const safe = (value) => (value === null || value === undefined ? '__NULL__' : String(value));
+  return `${safe(entry.difficulty)}|${safe(entry.player_name)}|${Number(entry.score_ms) || 0}|${safe(entry.created_at)}`;
 }
 
 function shouldShowOwnRankRow(ownEntry) {
@@ -366,6 +367,7 @@ async function fetchGlobalReplayData(entry) {
     if (replay) globalReplayCache.set(cacheKey, replay);
     return replay;
   } catch {
+    // Network/query failures should fail replay playback silently for this row.
     return null;
   }
 }
