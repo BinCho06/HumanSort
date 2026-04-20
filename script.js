@@ -336,14 +336,17 @@ function isCurrentPlayerEntry(entry, currentPlayerName) {
   return normalizePlayerName(entry.player_name) === normalizePlayerName(currentPlayerName);
 }
 
+function getGlobalReplayCacheKey(entry) {
+  return `${entry.difficulty || ''}|${entry.player_name || ''}|${Number(entry.score_ms) || 0}|${entry.created_at || ''}`;
+}
+
+function shouldShowOwnRankRow(ownEntry) {
+  return Boolean(ownEntry && Number(ownEntry.rank) > GLOBAL_LEADERBOARD_MAX_ENTRIES);
+}
+
 async function fetchGlobalReplayData(entry) {
   if (!supabaseClient || !entry) return null;
-  const cacheKey = JSON.stringify([
-    entry.difficulty || '',
-    entry.player_name || '',
-    Number(entry.score_ms) || 0,
-    entry.created_at || ''
-  ]);
+  const cacheKey = getGlobalReplayCacheKey(entry);
   if (globalReplayCache.has(cacheKey)) {
     return globalReplayCache.get(cacheKey);
   }
@@ -383,7 +386,7 @@ function renderGlobalColumn(colId, list, currentPlayerName = '', ownEntryOutside
   const col = document.getElementById(colId);
   if (!col) return;
   col.replaceChildren(col.firstElementChild);
-  const hasOwnExtraRow = ownEntryOutsideTopTen && Number(ownEntryOutsideTopTen.rank) > GLOBAL_LEADERBOARD_MAX_ENTRIES;
+  const hasOwnExtraRow = shouldShowOwnRankRow(ownEntryOutsideTopTen);
   if ((!list || list.length === 0) && !hasOwnExtraRow) {
     const empty = document.createElement('span');
     empty.className = 'hs-empty';
@@ -511,19 +514,19 @@ async function refreshGlobalLeaderboards() {
       'ghs-easy',
       byDifficulty.easy,
       currentPlayerName,
-      ownEasy && ownEasy.rank > GLOBAL_LEADERBOARD_MAX_ENTRIES ? ownEasy : null
+      shouldShowOwnRankRow(ownEasy) ? ownEasy : null
     );
     renderGlobalColumn(
       'ghs-normal',
       byDifficulty.normal,
       currentPlayerName,
-      ownNormal && ownNormal.rank > GLOBAL_LEADERBOARD_MAX_ENTRIES ? ownNormal : null
+      shouldShowOwnRankRow(ownNormal) ? ownNormal : null
     );
     renderGlobalColumn(
       'ghs-hard',
       byDifficulty.hard,
       currentPlayerName,
-      ownHard && ownHard.rank > GLOBAL_LEADERBOARD_MAX_ENTRIES ? ownHard : null
+      shouldShowOwnRankRow(ownHard) ? ownHard : null
     );
   } catch (err) {
     setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
