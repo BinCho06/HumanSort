@@ -64,7 +64,7 @@ document.addEventListener('click', () => {
 /* ── High Scores ── */
 const HS_KEY = 'humansort_scores';
 const HS_NAME_KEY = 'humansort_player_name';
-const HS_MAX = 5;
+const HS_MAX = 3;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
@@ -75,9 +75,14 @@ const ACT_DESELECT = 1;
 const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
 let supabaseClient = null;
+const globalReplayCache = new Map();
 
-function setGlobalStatus() {
+function setGlobalStatus(message = '') {
   if (!globalStatusEl) return;
+  if (message) {
+    globalStatusEl.textContent = message;
+    return;
+  }
   const name = getStoredPlayerName();
   globalStatusEl.textContent = name ? `Your global name: ${name}` : 'Your global name: Not set';
 }
@@ -322,11 +327,69 @@ function renderHighScores() {
   }
 }
 
-function renderGlobalColumn(colId, list) {
+function normalizePlayerName(name) {
+  return (name || '').trim().toLowerCase();
+}
+
+function isCurrentPlayerEntry(entry, currentPlayerName) {
+  if (!currentPlayerName) return false;
+  return normalizePlayerName(entry.player_name) === normalizePlayerName(currentPlayerName);
+}
+
+function getGlobalReplayCacheKey(entry) {
+  const safe = (value) => (value === null || value === undefined ? '__NULL__' : String(value));
+  return `${safe(entry.difficulty)}|${safe(entry.player_name)}|${Number(entry.score_ms) || 0}|${safe(entry.created_at)}`;
+}
+
+function shouldShowOwnRankRow(ownEntry) {
+  return Boolean(ownEntry && Number(ownEntry.rank) > GLOBAL_LEADERBOARD_MAX_ENTRIES);
+}
+
+async function fetchGlobalReplayData(entry) {
+  if (!supabaseClient || !entry) return null;
+  const cacheKey = getGlobalReplayCacheKey(entry);
+  if (globalReplayCache.has(cacheKey)) {
+    return globalReplayCache.get(cacheKey);
+  }
+  try {
+    let query = supabaseClient
+      .from(GLOBAL_LEADERBOARD_TABLE)
+      .select('replay_data')
+      .eq('difficulty', entry.difficulty)
+      .eq('score_ms', Number(entry.score_ms) || 0);
+    if (entry.player_name == null) query = query.is('player_name', null);
+    else query = query.eq('player_name', entry.player_name);
+    if (entry.created_at == null) query = query.is('created_at', null);
+    else query = query.eq('created_at', entry.created_at);
+    const { data, error } = await query.limit(1);
+    if (error) throw error;
+    const replay = (data && data[0] && typeof data[0].replay_data === 'string') ? data[0].replay_data : null;
+    if (replay) globalReplayCache.set(cacheKey, replay);
+    return replay;
+  } catch {
+    // Network/query failures should fail replay playback silently for this row.
+    return null;
+  }
+}
+
+async function watchGlobalReplay(btn, entry) {
+  if (!btn) return;
+  btn.disabled = true;
+  try {
+    const replay = await fetchGlobalReplayData(entry);
+    if (replay) watchReplay(replay);
+    else setGlobalStatus('Replay unavailable for this score');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderGlobalColumn(colId, list, currentPlayerName = '', ownEntryOutsideTopTen = null) {
   const col = document.getElementById(colId);
   if (!col) return;
   col.replaceChildren(col.firstElementChild);
-  if (!list || list.length === 0) {
+  const hasOwnExtraRow = shouldShowOwnRankRow(ownEntryOutsideTopTen);
+  if ((!list || list.length === 0) && !hasOwnExtraRow) {
     const empty = document.createElement('span');
     empty.className = 'hs-empty';
     empty.textContent = 'No scores yet';
@@ -336,6 +399,7 @@ function renderGlobalColumn(colId, list) {
   list.forEach((entry, i) => {
     const div = document.createElement('div');
     div.className = 'hs-entry';
+    if (isCurrentPlayerEntry(entry, currentPlayerName)) div.classList.add('own-score');
     const rank = document.createElement('span');
     rank.className = 'hs-rank';
     rank.textContent = `#${i + 1}`;
@@ -347,16 +411,73 @@ function renderGlobalColumn(colId, list) {
     div.appendChild(rank);
     div.appendChild(name);
     div.appendChild(time);
-    if (entry.replay_data) {
-      const btn = document.createElement('button');
-      btn.className = 'hs-replay-btn';
-      btn.textContent = '▶';
-      btn.title = 'Watch replay';
-      btn.addEventListener('click', () => watchReplay(entry.replay_data));
-      div.appendChild(btn);
-    }
+    const btn = document.createElement('button');
+    btn.className = 'hs-replay-btn';
+    btn.textContent = '▶';
+    btn.title = 'Watch replay';
+    btn.addEventListener('click', () => watchGlobalReplay(btn, entry));
+    div.appendChild(btn);
     col.appendChild(div);
   });
+
+  if (hasOwnExtraRow) {
+    const div = document.createElement('div');
+    div.className = 'hs-entry own-score own-rank-row';
+    const rank = document.createElement('span');
+    rank.className = 'hs-rank';
+    rank.textContent = `#${ownEntryOutsideTopTen.rank}`;
+    const name = document.createElement('span');
+    name.textContent = (ownEntryOutsideTopTen.player_name || 'Anonymous').slice(0, MAX_PLAYER_NAME_LENGTH);
+    const time = document.createElement('span');
+    time.className = 'hs-time';
+    time.textContent = fmtTime(Number(ownEntryOutsideTopTen.score_ms) || 0);
+    const btn = document.createElement('button');
+    btn.className = 'hs-replay-btn';
+    btn.textContent = '▶';
+    btn.title = 'Watch replay';
+    btn.addEventListener('click', () => watchGlobalReplay(btn, ownEntryOutsideTopTen));
+    div.appendChild(rank);
+    div.appendChild(name);
+    div.appendChild(time);
+    div.appendChild(btn);
+    col.appendChild(div);
+  }
+}
+
+async function fetchOwnRankedEntry(diff, playerName) {
+  if (!supabaseClient || !playerName) return null;
+  const { data: bestRows, error: bestError } = await supabaseClient
+    .from(GLOBAL_LEADERBOARD_TABLE)
+    .select('player_name,difficulty,score_ms,created_at')
+    .eq('difficulty', diff)
+    .eq('player_name', playerName)
+    .order('score_ms', { ascending: true })
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (bestError) throw bestError;
+  const best = bestRows && bestRows[0];
+  if (!best) return null;
+
+  const score = Number(best.score_ms) || 0;
+  const createdAt = best.created_at;
+  const { count: betterCount, error: betterError } = await supabaseClient
+    .from(GLOBAL_LEADERBOARD_TABLE)
+    .select('*', { count: 'exact', head: true })
+    .eq('difficulty', diff)
+    .lt('score_ms', score);
+  if (betterError) throw betterError;
+  const { count: tieEarlierCount, error: tieError } = await supabaseClient
+    .from(GLOBAL_LEADERBOARD_TABLE)
+    .select('*', { count: 'exact', head: true })
+    .eq('difficulty', diff)
+    .eq('score_ms', score)
+    .lt('created_at', createdAt);
+  if (tieError) throw tieError;
+
+  return {
+    ...best,
+    rank: Number(betterCount || 0) + Number(tieEarlierCount || 0) + 1
+  };
 }
 
 async function refreshGlobalLeaderboards() {
@@ -368,9 +489,10 @@ async function refreshGlobalLeaderboards() {
   }
   try {
     const difficulties = ['easy', 'normal', 'hard'];
+    const currentPlayerName = getStoredPlayerName();
     const { data, error } = await supabaseClient
       .from(GLOBAL_LEADERBOARD_TABLE)
-      .select('player_name,difficulty,score_ms,replay_data,created_at')
+      .select('player_name,difficulty,score_ms,created_at')
       .in('difficulty', difficulties)
       .order('score_ms', { ascending: true })
       .order('created_at', { ascending: true });
@@ -383,9 +505,31 @@ async function refreshGlobalLeaderboards() {
       if (byDifficulty[key].length >= GLOBAL_LEADERBOARD_MAX_ENTRIES) continue;
       byDifficulty[key].push(row);
     }
-    renderGlobalColumn('ghs-easy', byDifficulty.easy);
-    renderGlobalColumn('ghs-normal', byDifficulty.normal);
-    renderGlobalColumn('ghs-hard', byDifficulty.hard);
+    const [ownEasy, ownNormal, ownHard] = currentPlayerName
+      ? await Promise.all([
+          fetchOwnRankedEntry('easy', currentPlayerName),
+          fetchOwnRankedEntry('normal', currentPlayerName),
+          fetchOwnRankedEntry('hard', currentPlayerName)
+        ])
+      : [null, null, null];
+    renderGlobalColumn(
+      'ghs-easy',
+      byDifficulty.easy,
+      currentPlayerName,
+      shouldShowOwnRankRow(ownEasy) ? ownEasy : null
+    );
+    renderGlobalColumn(
+      'ghs-normal',
+      byDifficulty.normal,
+      currentPlayerName,
+      shouldShowOwnRankRow(ownNormal) ? ownNormal : null
+    );
+    renderGlobalColumn(
+      'ghs-hard',
+      byDifficulty.hard,
+      currentPlayerName,
+      shouldShowOwnRankRow(ownHard) ? ownHard : null
+    );
   } catch (err) {
     setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
   }
