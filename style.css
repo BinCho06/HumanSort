@@ -325,6 +325,17 @@ body {
   font-size: 12px;
   font-family: monospace;
 }
+.hs-entry.own-score {
+  color: var(--timer-color);
+}
+.hs-entry.own-score .hs-rank {
+  opacity: 0.7;
+}
+.hs-entry.own-rank-row {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--ctrl-border);
+}
 
 .hs-rank { opacity: 0.45; min-width: 16px; text-align: right; }
 .hs-time { color: var(--timer-color); font-weight: bold; }
@@ -405,6 +416,7 @@ body {
   margin-left: 0;
 }
 .hs-replay-btn:hover { background: var(--btn-hover); color: #fff; border-color: var(--btn-hover); }
+.hs-replay-btn:disabled { opacity: 0.5; cursor: wait; }
 
 /* ── Win overlay ── */
 #overlay {
