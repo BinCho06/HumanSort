@@ -18,6 +18,10 @@ const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
 const changeNameBtn  = document.getElementById('change-name-btn');
+const nameEditorEl   = document.getElementById('name-editor');
+const nameInputEl    = document.getElementById('name-input');
+const nameSaveBtn    = document.getElementById('name-save-btn');
+const nameCancelBtn  = document.getElementById('name-cancel-btn');
 const globalStatusEl = document.getElementById('global-status');
 
 /* ── Difficulty state ── */
@@ -72,9 +76,10 @@ const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
 let supabaseClient = null;
 
-function setGlobalStatus(message) {
+function setGlobalStatus() {
   if (!globalStatusEl) return;
-  globalStatusEl.textContent = message || '';
+  const name = getStoredPlayerName();
+  globalStatusEl.textContent = name ? `Your global name: ${name}` : 'Your global name: Not set';
 }
 
 function getStoredPlayerName() {
@@ -95,30 +100,71 @@ function setStoredPlayerName(name) {
   } catch {
     // ignore localStorage failures
   }
+  setGlobalStatus();
   return clean;
 }
 
-function promptForPlayerName(initialValue = '') {
-  const raw = window.prompt(`Enter your global leaderboard name (max ${MAX_PLAYER_NAME_LENGTH} chars):`, initialValue);
-  if (raw === null) return '';
-  const clean = raw.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
+function openNameEditor(initialValue = '') {
+  if (!nameEditorEl || !nameInputEl) return;
+  nameEditorEl.hidden = false;
+  nameInputEl.value = initialValue.slice(0, MAX_PLAYER_NAME_LENGTH);
+  nameInputEl.focus();
+  nameInputEl.select();
+}
+
+function closeNameEditor() {
+  if (!nameEditorEl) return;
+  nameEditorEl.hidden = true;
+}
+
+function saveNameFromEditor() {
+  if (!nameInputEl) return '';
+  const clean = nameInputEl.value.trim().slice(0, MAX_PLAYER_NAME_LENGTH);
   if (!clean) return '';
-  return setStoredPlayerName(clean);
+  const saved = setStoredPlayerName(clean);
+  closeNameEditor();
+  return saved;
 }
 
 function getOrPromptPlayerName() {
   const existing = getStoredPlayerName();
   if (existing) return existing;
-  return promptForPlayerName('');
+  openNameEditor('');
+  return '';
 }
 
 if (changeNameBtn) {
   changeNameBtn.addEventListener('click', () => {
     const current = getStoredPlayerName();
-    const next = promptForPlayerName(current);
-    if (next) setGlobalStatus(`Global name set to: ${next}`);
+    openNameEditor(current);
   });
 }
+
+if (nameSaveBtn) {
+  nameSaveBtn.addEventListener('click', () => {
+    saveNameFromEditor();
+  });
+}
+
+if (nameCancelBtn) {
+  nameCancelBtn.addEventListener('click', () => {
+    closeNameEditor();
+  });
+}
+
+if (nameInputEl) {
+  nameInputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveNameFromEditor();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeNameEditor();
+    }
+  });
+}
+
+setGlobalStatus();
 
 function bytesToBase64(bytes) {
   let bin = '';

@@ -61,6 +61,13 @@
             <span class="settings-row-label">Global Name</span>
             <button id="change-name-btn" class="ctrl-btn" type="button">Change</button>
           </div>
+          <div id="name-editor" hidden>
+            <input id="name-input" type="text" maxlength="20" placeholder="Enter global name" aria-label="Global name">
+            <div id="name-editor-actions">
+              <button id="name-save-btn" class="ctrl-btn" type="button">Save</button>
+              <button id="name-cancel-btn" class="ctrl-btn" type="button">Cancel</button>
+            </div>
+          </div>
           <div id="global-status" aria-live="polite"></div>
         </div>
       </div>
