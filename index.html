@@ -120,7 +120,18 @@
   <div id="overlay">
     <h2>🎉 Sorted!</h2>
     <div class="lbl" id="final-time"></div>
-    <button id="play-again-btn">Play Again</button>
+  </div>
+
+  <div id="name-modal" aria-hidden="true">
+    <div id="name-modal-card" role="dialog" aria-modal="true" aria-labelledby="name-modal-title">
+      <h3 id="name-modal-title">Enter a global name</h3>
+      <p>If you skip this, your score will not appear on the global leaderboard.</p>
+      <input id="name-modal-input" type="text" maxlength="20" placeholder="Your name" aria-label="Global name for leaderboard">
+      <div id="name-modal-actions">
+        <button id="name-modal-save-btn" class="ctrl-btn" type="button">Save</button>
+        <button id="name-modal-skip-btn" class="ctrl-btn" type="button">Skip</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
