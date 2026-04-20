@@ -295,9 +295,16 @@ body {
   margin-top: 12px;
 }
 
-#recent-games,
-#ghs-selected {
-  margin-bottom: 4px;
+#hs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+#ghs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .hs-col { display: flex; flex-direction: column; gap: 4px; }
@@ -326,39 +333,6 @@ body {
   font-size: 12px;
   opacity: 0.35;
   font-style: italic;
-}
-
-#global-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-#global-controls label {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
-#global-difficulty-select {
-  background: var(--ctrl-bg);
-  color: var(--color);
-  border: 1px solid var(--ctrl-border);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 12px;
-}
-
-#beat-times-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.beat-time-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 #change-name-btn {
