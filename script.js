@@ -17,6 +17,12 @@ const swapBtn        = document.getElementById('swap-btn');
 const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
+const replayPlayToggleBtn = document.getElementById('replay-play-toggle-btn');
+const replayPlayAgainBtn  = document.getElementById('replay-play-again-btn');
+const replaySpeedDownBtn  = document.getElementById('replay-speed-down-btn');
+const replaySpeedUpBtn    = document.getElementById('replay-speed-up-btn');
+const replaySpeedLabel    = document.getElementById('replay-speed-label');
+const replaySpeedSlider   = document.getElementById('replay-speed-slider');
 const changeNameBtn  = document.getElementById('change-name-btn');
 const nameEditorEl   = document.getElementById('name-editor');
 const nameInputEl    = document.getElementById('name-input');
@@ -72,6 +78,10 @@ const HS_MAX = 3;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
+const MAX_REPLAY_DELTA_MS = 0x7ffffffff; // 35 bits across max 5 varint bytes
+const REPLAY_SPEED_STEPS = [0.1, 0.2, 0.5, 1, 1.5, 2, 4, 10, 100, 1000];
+const REPLAY_DEFAULT_SPEED_INDEX = REPLAY_SPEED_STEPS.indexOf(1);
+const REPLAY_FINISH_HOLD_MS = 400;
 const SUPABASE_URL = 'https://ruwcxfppupahnzvzqrej.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1d2N4ZnBwdXBhaG56dnpxcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzNjE2NDIsImV4cCI6MjA5MTkzNzY0Mn0.Z37HqSTx9O0vFaQMZrzRkQhaUTXyf4D5ZCAVtMxZs-E';
 const ACT_SELECT   = 0;
@@ -81,14 +91,15 @@ const ACT_SWAP     = 3;
 let supabaseClient = null;
 const globalReplayCache = new Map();
 
-function setGlobalStatus(message = '') {
+function setGlobalStatus() {
   if (!globalStatusEl) return;
-  if (message) {
-    globalStatusEl.textContent = message;
-    return;
-  }
   const name = getStoredPlayerName();
-  globalStatusEl.textContent = name ? `Your global name: ${name}` : 'Your global name: Not set';
+  globalStatusEl.textContent = name ? `Player name: ${name}` : 'Player name: Not set';
+}
+
+function logGlobalStatusMessage(message = '') {
+  if (!message) return;
+  console.info(`[Global] ${message}`);
 }
 
 function getStoredPlayerName() {
@@ -248,6 +259,71 @@ function base64ToBytes(base64) {
   return out;
 }
 
+function encodeReplayDelta(deltaRaw) {
+  let delta = Number(deltaRaw) || 0;
+  if (delta < 0) delta = 0;
+  if (delta > MAX_REPLAY_DELTA_MS) delta = MAX_REPLAY_DELTA_MS;
+  delta = Math.floor(delta);
+
+  const out = [];
+  do {
+    out.push(delta & 0x7f);
+    delta = Math.floor(delta / 128);
+  } while (delta > 0 && out.length < 5);
+
+  if (delta > 0) out[out.length - 1] |= 0x80;
+  for (let i = 0; i < out.length - 1; i++) out[i] |= 0x80;
+  return out;
+}
+
+function decodeReplayDeltaVarint(bytes, offset) {
+  let delta = 0;
+  let factor = 1;
+  let off = offset;
+  for (let i = 0; i < 5; i++) {
+    if (off >= bytes.length) return null;
+    const b = bytes[off++];
+    delta += (b & 0x7f) * factor;
+    if ((b & 0x80) === 0) {
+      return { delta, nextOffset: off };
+    }
+    factor *= 128;
+  }
+  return null;
+}
+
+function tryParseReplayEvents(bytes, startOffset, numBars, useLegacy = false) {
+  const events = [];
+  let t = 0;
+  let off = startOffset;
+
+  while (off < bytes.length) {
+    let deltaInfo = null;
+    if (useLegacy) {
+      const b0 = bytes[off++];
+      let delta = b0;
+      if (b0 & 0x80) {
+        if (off >= bytes.length) return null;
+        delta = ((b0 & 0x7f) << 8) | bytes[off++];
+      }
+      deltaInfo = { delta, nextOffset: off };
+    } else {
+      deltaInfo = decodeReplayDeltaVarint(bytes, off);
+      if (!deltaInfo) return null;
+      off = deltaInfo.nextOffset;
+    }
+
+    if (off >= bytes.length) return null;
+    const action = bytes[off++];
+    t += deltaInfo.delta;
+    const idx = action & 0x3f;
+    if (idx >= numBars) return null;
+    events.push([t, action >> 6, idx]);
+  }
+
+  return events;
+}
+
 function packReplay(numBars, init, events) {
   const out = [numBars & 0xff];
   for (let i = 0; i < numBars; i++) out.push(init[i] & 0xff);
@@ -260,14 +336,7 @@ function packReplay(numBars, init, events) {
     let delta  = t - prevT;
     prevT      = t;
     if (delta < 0) delta = 0;
-    if (delta > 0x7fff) delta = 0x7fff;
-
-    if (delta < 128) {
-      out.push(delta);
-    } else {
-      out.push(0x80 | (delta >> 8));
-      out.push(delta & 0xff);
-    }
+    out.push(...encodeReplayDelta(delta));
     out.push(((type & 0x03) << 6) | (idx & 0x3f));
   }
 
@@ -284,22 +353,10 @@ function unpackReplay(base64) {
     if (!numBars || bytes.length < 1 + numBars) return null;
     const init = Array.from(bytes.slice(1, 1 + numBars));
 
-    const events = [];
-    let t = 0;
     let off = 1 + numBars;
-    while (off < bytes.length) {
-      const b0 = bytes[off++];
-      let delta = b0;
-      if (b0 & 0x80) {
-        if (off >= bytes.length) return null;
-        delta = ((b0 & 0x7f) << 8) | bytes[off++];
-      }
-      if (off >= bytes.length) return null;
-
-      const action = bytes[off++];
-      t += delta;
-      events.push([t, action >> 6, action & 0x3f]);
-    }
+    let events = tryParseReplayEvents(bytes, off, numBars, false);
+    if (!events) events = tryParseReplayEvents(bytes, off, numBars, true);
+    if (!events) return null;
     return { numBars, init, events };
   } catch {
     return null;
@@ -438,7 +495,10 @@ async function watchGlobalReplay(btn, entry) {
   try {
     const replay = await fetchGlobalReplayData(entry);
     if (replay) watchReplay(replay);
-    else setGlobalStatus('Replay unavailable for this score');
+    else {
+      logGlobalStatusMessage('Replay unavailable for this score');
+      setGlobalStatus();
+    }
   } finally {
     btn.disabled = false;
   }
@@ -602,19 +662,22 @@ async function refreshGlobalLeaderboards() {
       shouldShowOwnRankRow(ownHard) ? ownHard : null
     );
   } catch (err) {
-    setGlobalStatus(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
+    logGlobalStatusMessage(`Global leaderboard unavailable: ${err.message || 'Unknown error'}`);
+    setGlobalStatus();
   }
 }
 
 function initSupabaseClient() {
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-    setGlobalStatus('Global leaderboard unavailable offline');
+    logGlobalStatusMessage('Global leaderboard unavailable offline');
+    setGlobalStatus();
     return;
   }
   try {
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   } catch (err) {
-    setGlobalStatus(`Supabase init failed: ${err.message || 'Unknown error'}`);
+    logGlobalStatusMessage(`Supabase init failed: ${err.message || 'Unknown error'}`);
+    setGlobalStatus();
   }
 }
 
@@ -628,7 +691,8 @@ async function ensureSupabaseSession() {
       if (signInError) throw signInError;
     }
   } catch (err) {
-    setGlobalStatus(`Global auth unavailable: ${err.message || 'Unknown error'}`);
+    logGlobalStatusMessage(`Global auth unavailable: ${err.message || 'Unknown error'}`);
+    setGlobalStatus();
   }
 }
 
@@ -636,7 +700,8 @@ async function submitGlobalScore(diff, ms, replay) {
   if (!supabaseClient) return;
   const playerName = await requestPlayerNameModal();
   if (!playerName) {
-    setGlobalStatus('Global submit skipped (name required)');
+    logGlobalStatusMessage('Global submit skipped (name required)');
+    setGlobalStatus();
     return;
   }
   try {
@@ -647,13 +712,16 @@ async function submitGlobalScore(diff, ms, replay) {
       p_replay_data: replay
     });
     if (error) {
-      setGlobalStatus(`Global submit failed: ${error.message}`);
+      logGlobalStatusMessage(`Global submit failed: ${error.message}`);
+      setGlobalStatus();
       return;
     }
-    setGlobalStatus('Global score submitted');
+    logGlobalStatusMessage('Global score submitted');
+    setGlobalStatus();
     refreshGlobalLeaderboards();
   } catch (err) {
-    setGlobalStatus(`Global submit failed: ${err.message || 'Unknown error'}`);
+    logGlobalStatusMessage(`Global submit failed: ${err.message || 'Unknown error'}`);
+    setGlobalStatus();
   }
 }
 
@@ -711,11 +779,15 @@ let touchIsDrag = false;
 /* ── Replay state ── */
 let replayInitVals = [];  // snapshot of values[] taken at game start
 let replayEvents   = [];  // recorded events: [absT, action, idx]
-let replayTids     = [];  // setTimeout IDs for active replay
 let isReplaying    = false;
-let replayTickId   = null;
-let replayStartMs  = 0;
-let replayTotalMs  = 0;
+let replayAnimFrameId = null;
+let replayDecoded = null;
+let replayDurationMs = 0;
+let replayVirtualMs = 0;
+let replayLastFrameTs = 0;
+let replayNextEventIdx = 0;
+let replayIsPlaying = false;
+let replaySpeedIndex = REPLAY_DEFAULT_SPEED_INDEX;
 
 /* Record a replay event (no-op before timer starts or after game ends) */
 function recEvent(action, idx) {
@@ -1018,25 +1090,122 @@ function scheduleReturnToPregame() {
   }, 2000);
 }
 
-function startReplayTimer(totalMs) {
-  replayTotalMs = totalMs;
-  replayStartMs = Date.now();
-  timerEl.textContent = fmtTime(0);
-  stopReplayTimer(false);
-  replayTickId = setInterval(() => {
-    const elapsed = Math.min(Date.now() - replayStartMs, replayTotalMs);
-    timerEl.textContent = fmtTime(elapsed);
-  }, 100);
+function formatReplaySpeed(speed) {
+  if (speed >= 100) return `${Math.round(speed)}x`;
+  if (Number.isInteger(speed)) return `${speed}x`;
+  return `${speed.toFixed(1).replace(/\.0$/, '')}x`;
 }
 
-function stopReplayTimer(showFinal = true) {
-  if (replayTickId) {
-    clearInterval(replayTickId);
-    replayTickId = null;
+function updateReplaySpeedUi() {
+  const speed = REPLAY_SPEED_STEPS[replaySpeedIndex] || 1;
+  if (replaySpeedLabel) replaySpeedLabel.textContent = formatReplaySpeed(speed);
+  if (replaySpeedSlider) replaySpeedSlider.value = String(replaySpeedIndex);
+}
+
+function updateReplayPlayToggleLabel() {
+  if (!replayPlayToggleBtn) return;
+  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸ Pause' : '▶ Play';
+}
+
+function getReplaySpeed() {
+  return REPLAY_SPEED_STEPS[replaySpeedIndex] || 1;
+}
+
+function getReplayTimelineTotalMs() {
+  return replayDurationMs + REPLAY_FINISH_HOLD_MS;
+}
+
+function stopReplayAnimation() {
+  if (replayAnimFrameId != null) {
+    cancelAnimationFrame(replayAnimFrameId);
+    replayAnimFrameId = null;
   }
-  if (showFinal) {
-    timerEl.textContent = fmtTime(replayTotalMs);
+  replayLastFrameTs = 0;
+}
+
+function updateReplayTimerDisplay() {
+  timerEl.textContent = fmtTime(Math.min(Math.max(replayVirtualMs, 0), replayDurationMs));
+}
+
+function applyReplayEventsThroughCurrentTime() {
+  if (!replayDecoded) return;
+  while (
+    replayNextEventIdx < replayDecoded.events.length &&
+    replayDecoded.events[replayNextEventIdx][0] <= replayVirtualMs
+  ) {
+    const [, type, idx] = replayDecoded.events[replayNextEventIdx];
+    applyReplayEvent(type, [idx]);
+    replayNextEventIdx++;
   }
+}
+
+function finalizeReplayFrameIfDone() {
+  if (replayVirtualMs < getReplayTimelineTotalMs()) return false;
+  replayVirtualMs = getReplayTimelineTotalMs();
+  updateReplayTimerDisplay();
+  finished = true;
+  replayIsPlaying = false;
+  stopReplayAnimation();
+  updateReplayPlayToggleLabel();
+  render();
+  return true;
+}
+
+function replayFrame(nowTs) {
+  replayAnimFrameId = null;
+  if (!isReplaying || !replayIsPlaying) return;
+
+  if (!replayLastFrameTs) replayLastFrameTs = nowTs;
+  const frameDelta = Math.max(0, nowTs - replayLastFrameTs);
+  replayLastFrameTs = nowTs;
+  replayVirtualMs += frameDelta * getReplaySpeed();
+
+  applyReplayEventsThroughCurrentTime();
+  if (finalizeReplayFrameIfDone()) return;
+  updateReplayTimerDisplay();
+  replayAnimFrameId = requestAnimationFrame(replayFrame);
+}
+
+function startReplayAnimation() {
+  if (!isReplaying || !replayDecoded) return;
+  if (replayIsPlaying) return;
+  replayIsPlaying = true;
+  replayLastFrameTs = 0;
+  updateReplayPlayToggleLabel();
+  if (replayAnimFrameId == null) replayAnimFrameId = requestAnimationFrame(replayFrame);
+}
+
+function pauseReplayAnimation() {
+  replayIsPlaying = false;
+  stopReplayAnimation();
+  updateReplayPlayToggleLabel();
+}
+
+function restartReplay(autoPlay = true) {
+  if (!replayDecoded) return;
+  replayVirtualMs = 0;
+  replayNextEventIdx = 0;
+  replayLastFrameTs = 0;
+  replayIsPlaying = false;
+  stopReplayAnimation();
+  finished = false;
+  gameReady = false;
+  running = false;
+  selSet.clear();
+
+  values = replayDecoded.init.slice();
+  buildBars(replayDecoded.numBars);
+  render();
+  updateReplayTimerDisplay();
+  updateReplayPlayToggleLabel();
+
+  if (autoPlay) startReplayAnimation();
+}
+
+function setReplaySpeedByIndex(nextIndex) {
+  const clamped = Math.max(0, Math.min(REPLAY_SPEED_STEPS.length - 1, nextIndex | 0));
+  replaySpeedIndex = clamped;
+  updateReplaySpeedUi();
 }
 
 function showPregameOverlay() {
@@ -1061,13 +1230,16 @@ function newGame() {
     clearTimeout(postWinTid);
     postWinTid = null;
   }
-  if (isReplaying) {
-    replayTids.forEach(clearTimeout);
-    replayTids   = [];
-    isReplaying  = false;
-    replayBanner.classList.remove('active');
-  }
-  stopReplayTimer(false);
+  stopReplayAnimation();
+  replayDecoded = null;
+  replayDurationMs = 0;
+  replayVirtualMs = 0;
+  replayNextEventIdx = 0;
+  replayIsPlaying = false;
+  isReplaying = false;
+  replayBanner.classList.remove('active');
+  updateReplayPlayToggleLabel();
+  updateReplaySpeedUi();
   hidePregameOverlay();
 
   const n = selectedCols;
@@ -1105,6 +1277,15 @@ function newGame() {
 /* ── Control listeners ── */
 playBtn.addEventListener('click', startPlay);
 replayStopBtn.addEventListener('click', stopReplay);
+if (replayPlayToggleBtn) replayPlayToggleBtn.addEventListener('click', toggleReplayPlayback);
+if (replayPlayAgainBtn) replayPlayAgainBtn.addEventListener('click', () => restartReplay(true));
+if (replaySpeedDownBtn) replaySpeedDownBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex - 1));
+if (replaySpeedUpBtn) replaySpeedUpBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex + 1));
+if (replaySpeedSlider) {
+  replaySpeedSlider.addEventListener('input', () => {
+    setReplaySpeedByIndex(Number(replaySpeedSlider.value));
+  });
+}
 
 window.addEventListener('resize', render);
 
@@ -1133,12 +1314,7 @@ function applyReplayEvent(type, args) {
 }
 
 function watchReplay(replay) {
-  // Tear down any existing replay or running game
-  if (isReplaying) {
-    replayTids.forEach(clearTimeout);
-    replayTids = [];
-  }
-  stopReplayTimer(false);
+  stopReplayAnimation();
   if (tickId) { clearInterval(tickId); tickId = null; }
   running   = false;
   finished  = false;
@@ -1146,8 +1322,6 @@ function watchReplay(replay) {
   selSet.clear();
   overlay.classList.remove('show');
   hidePregameOverlay();
-  isReplaying = true;
-  replayBanner.classList.add('active');
 
   const decodedReplay = unpackReplay(replay);
   if (!decodedReplay) {
@@ -1155,38 +1329,32 @@ function watchReplay(replay) {
     return;
   }
 
-  // Restore initial state
-  values = decodedReplay.init.slice();
-  buildBars(decodedReplay.numBars);
-  render();
-
-  // Schedule each recorded event at its original timestamp
+  replayDecoded = decodedReplay;
+  isReplaying = true;
+  replayBanner.classList.add('active');
+  setReplaySpeedByIndex(REPLAY_DEFAULT_SPEED_INDEX);
   const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
-  const lastT = lastEvent ? lastEvent[0] : 0;
-  startReplayTimer(lastT);
-  for (const ev of decodedReplay.events) {
-    const [t, type, idx] = ev;
-    const tid = setTimeout(() => applyReplayEvent(type, [idx]), t);
-    replayTids.push(tid);
-  }
-
-  // After all events, show the final sorted state
-  const finTid = setTimeout(() => {
-    if (!isReplaying) return;
-    finished = true;
-    stopReplayTimer(true);
-    render();
-  }, lastT + 400);
-  replayTids.push(finTid);
+  replayDurationMs = lastEvent ? lastEvent[0] : 0;
+  restartReplay(true);
 }
 
 function stopReplay() {
-  replayTids.forEach(clearTimeout);
-  replayTids  = [];
-  stopReplayTimer(false);
+  stopReplayAnimation();
+  replayDecoded = null;
+  replayDurationMs = 0;
+  replayVirtualMs = 0;
+  replayNextEventIdx = 0;
+  replayIsPlaying = false;
   isReplaying = false;
   replayBanner.classList.remove('active');
+  updateReplayPlayToggleLabel();
   newGame();
+}
+
+function toggleReplayPlayback() {
+  if (!isReplaying || !replayDecoded) return;
+  if (replayIsPlaying) pauseReplayAnimation();
+  else startReplayAnimation();
 }
 
 /* ── Boot ── */

@@ -390,6 +390,18 @@ body {
   font-size: 12px;
 }
 
+#name-cancel-btn,
+#name-modal-skip-btn {
+  background: #b91c1c;
+}
+
+#name-cancel-btn:hover,
+#name-modal-skip-btn:hover,
+#name-cancel-btn:active,
+#name-modal-skip-btn:active {
+  background: #991b1b;
+}
+
 /* ── Replay banner ── */
 #replay-banner {
   display: none;
@@ -403,6 +415,40 @@ body {
   flex-shrink: 0;
 }
 #replay-banner.active { display: flex; }
+
+#replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+#replay-speed-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+#replay-speed-label {
+  min-width: 52px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+.replay-speed-btn {
+  min-width: 28px;
+  padding: 4px 8px;
+}
+
+#replay-speed-slider {
+  width: 100px;
+  accent-color: #fff;
+}
 
 .hs-replay-btn {
   background: transparent;
