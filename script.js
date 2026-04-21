@@ -1098,7 +1098,10 @@ function formatReplaySpeed(speed) {
 function updateReplaySpeedUi() {
   const speed = REPLAY_SPEED_STEPS[replaySpeedIndex] || 1;
   if (replaySpeedLabel) replaySpeedLabel.textContent = formatReplaySpeed(speed);
-  if (replaySpeedSlider) replaySpeedSlider.value = String(replaySpeedIndex);
+  if (replaySpeedSlider) {
+    replaySpeedSlider.max = String(REPLAY_SPEED_STEPS.length - 1);
+    replaySpeedSlider.value = String(replaySpeedIndex);
+  }
 }
 
 function updateReplayPlayToggleLabel() {
@@ -1202,7 +1205,9 @@ function restartReplay(autoPlay = true) {
 }
 
 function setReplaySpeedByIndex(nextIndex) {
-  const clamped = Math.max(0, Math.min(REPLAY_SPEED_STEPS.length - 1, nextIndex | 0));
+  const parsed = Number(nextIndex);
+  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : REPLAY_DEFAULT_SPEED_INDEX;
+  const clamped = Math.max(0, Math.min(REPLAY_SPEED_STEPS.length - 1, normalized));
   replaySpeedIndex = clamped;
   updateReplaySpeedUi();
 }
