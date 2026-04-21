@@ -78,7 +78,7 @@ const HS_MAX = 3;
 const MAX_PLAYER_NAME_LENGTH = 20;
 const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
-const MAX_REPLAY_DELTA_MS = 0x7ffffffff; // 35 bits across max 5 varint bytes
+const MAX_REPLAY_DELTA_MS = (2 ** 35) - 1; // 35 bits across max 5 varint bytes
 const REPLAY_SPEED_STEPS = [0.1, 0.2, 0.5, 1, 1.5, 2, 4, 10, 100, 1000];
 const REPLAY_DEFAULT_SPEED_INDEX = REPLAY_SPEED_STEPS.indexOf(1);
 const REPLAY_FINISH_HOLD_MS = 400;
@@ -271,7 +271,6 @@ function encodeReplayDelta(deltaRaw) {
     delta = Math.floor(delta / 128);
   } while (delta > 0 && out.length < 5);
 
-  if (delta > 0) out[out.length - 1] |= 0x80;
   for (let i = 0; i < out.length - 1; i++) out[i] |= 0x80;
   return out;
 }
@@ -1116,7 +1115,7 @@ function getReplayTimelineTotalMs() {
 }
 
 function stopReplayAnimation() {
-  if (replayAnimFrameId != null) {
+  if (replayAnimFrameId !== null) {
     cancelAnimationFrame(replayAnimFrameId);
     replayAnimFrameId = null;
   }
@@ -1172,7 +1171,7 @@ function startReplayAnimation() {
   replayIsPlaying = true;
   replayLastFrameTs = 0;
   updateReplayPlayToggleLabel();
-  if (replayAnimFrameId == null) replayAnimFrameId = requestAnimationFrame(replayFrame);
+  if (replayAnimFrameId === null) replayAnimFrameId = requestAnimationFrame(replayFrame);
 }
 
 function pauseReplayAnimation() {
