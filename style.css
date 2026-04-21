@@ -445,8 +445,10 @@ body {
   padding: 4px 8px;
 }
 
-#replay-speed-slider {
-  width: 100px;
+#replay-seek-slider {
+  flex: 1;
+  min-width: 80px;
+  max-width: 260px;
   accent-color: #fff;
 }
 

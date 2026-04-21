@@ -22,7 +22,7 @@ const replayPlayAgainBtn  = document.getElementById('replay-play-again-btn');
 const replaySpeedDownBtn  = document.getElementById('replay-speed-down-btn');
 const replaySpeedUpBtn    = document.getElementById('replay-speed-up-btn');
 const replaySpeedLabel    = document.getElementById('replay-speed-label');
-const replaySpeedSlider   = document.getElementById('replay-speed-slider');
+const replaySeekSlider   = document.getElementById('replay-seek-slider');
 const changeNameBtn  = document.getElementById('change-name-btn');
 const nameEditorEl   = document.getElementById('name-editor');
 const nameInputEl    = document.getElementById('name-input');
@@ -291,26 +291,15 @@ function decodeReplayDeltaVarint(bytes, offset) {
   return null;
 }
 
-function tryParseReplayEvents(bytes, startOffset, numBars, useLegacy = false) {
+function tryParseReplayEvents(bytes, startOffset, numBars) {
   const events = [];
   let t = 0;
   let off = startOffset;
 
   while (off < bytes.length) {
-    let deltaInfo = null;
-    if (useLegacy) {
-      const b0 = bytes[off++];
-      let delta = b0;
-      if (b0 & 0x80) {
-        if (off >= bytes.length) return null;
-        delta = ((b0 & 0x7f) << 8) | bytes[off++];
-      }
-      deltaInfo = { delta, nextOffset: off };
-    } else {
-      deltaInfo = decodeReplayDeltaVarint(bytes, off);
-      if (!deltaInfo) return null;
-      off = deltaInfo.nextOffset;
-    }
+    const deltaInfo = decodeReplayDeltaVarint(bytes, off);
+    if (!deltaInfo) return null;
+    off = deltaInfo.nextOffset;
 
     if (off >= bytes.length) return null;
     const action = bytes[off++];
@@ -353,8 +342,7 @@ function unpackReplay(base64) {
     const init = Array.from(bytes.slice(1, 1 + numBars));
 
     let off = 1 + numBars;
-    let events = tryParseReplayEvents(bytes, off, numBars, false);
-    if (!events) events = tryParseReplayEvents(bytes, off, numBars, true);
+    const events = tryParseReplayEvents(bytes, off, numBars);
     if (!events) return null;
     return { numBars, init, events };
   } catch {
@@ -787,6 +775,7 @@ let replayLastFrameTs = 0;
 let replayNextEventIdx = 0;
 let replayIsPlaying = false;
 let replaySpeedIndex = REPLAY_DEFAULT_SPEED_INDEX;
+let replaySeekingWasPlaying = false;
 
 /* Record a replay event (no-op before timer starts or after game ends) */
 function recEvent(action, idx) {
@@ -1098,10 +1087,12 @@ function formatReplaySpeed(speed) {
 function updateReplaySpeedUi() {
   const speed = REPLAY_SPEED_STEPS[replaySpeedIndex] || 1;
   if (replaySpeedLabel) replaySpeedLabel.textContent = formatReplaySpeed(speed);
-  if (replaySpeedSlider) {
-    replaySpeedSlider.max = String(REPLAY_SPEED_STEPS.length - 1);
-    replaySpeedSlider.value = String(replaySpeedIndex);
-  }
+}
+
+function updateReplaySeekSlider() {
+  if (!replaySeekSlider || !replayDurationMs) return;
+  replaySeekSlider.max   = String(Math.floor(replayDurationMs));
+  replaySeekSlider.value = String(Math.floor(Math.min(replayVirtualMs, replayDurationMs)));
 }
 
 function updateReplayPlayToggleLabel() {
@@ -1127,6 +1118,7 @@ function stopReplayAnimation() {
 
 function updateReplayTimerDisplay() {
   timerEl.textContent = fmtTime(Math.min(Math.max(replayVirtualMs, 0), replayDurationMs));
+  updateReplaySeekSlider();
 }
 
 function applyReplayEventsThroughCurrentTime() {
@@ -1244,6 +1236,7 @@ function newGame() {
   replayBanner.classList.remove('active');
   updateReplayPlayToggleLabel();
   updateReplaySpeedUi();
+  if (replaySeekSlider) { replaySeekSlider.value = '0'; replaySeekSlider.max = '100000'; }
   hidePregameOverlay();
 
   const n = selectedCols;
@@ -1285,36 +1278,67 @@ if (replayPlayToggleBtn) replayPlayToggleBtn.addEventListener('click', toggleRep
 if (replayPlayAgainBtn) replayPlayAgainBtn.addEventListener('click', () => restartReplay(true));
 if (replaySpeedDownBtn) replaySpeedDownBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex - 1));
 if (replaySpeedUpBtn) replaySpeedUpBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex + 1));
-if (replaySpeedSlider) {
-  replaySpeedSlider.addEventListener('input', () => {
-    setReplaySpeedByIndex(Number(replaySpeedSlider.value));
+if (replaySeekSlider) {
+  replaySeekSlider.addEventListener('pointerdown', () => {
+    if (!isReplaying) return;
+    replaySeekingWasPlaying = replayIsPlaying;
+    if (replayIsPlaying) pauseReplayAnimation();
+  });
+  replaySeekSlider.addEventListener('input', () => {
+    if (!replayDecoded || !replayDurationMs) return;
+    seekReplayTo(Number(replaySeekSlider.value));
+  });
+  replaySeekSlider.addEventListener('pointerup', () => {
+    if (!isReplaying) return;
+    if (replaySeekingWasPlaying) startReplayAnimation();
+    replaySeekingWasPlaying = false;
   });
 }
 
 window.addEventListener('resize', render);
 
 /* ── Replay playback ── */
-function applyReplayEvent(type, args) {
-  if (!isReplaying) return;
+function applyReplayEventRaw(type, idx) {
   switch (type) {
-    case ACT_SELECT:
-      selSet.add(args[0]);
-      break;
-    case ACT_DESELECT:
-      selSet.delete(args[0]);
-      break;
+    case ACT_SELECT:   selSet.add(idx); break;
+    case ACT_DESELECT: selSet.delete(idx); break;
     case ACT_MOVE:
       inputMode = 'insert';
-      applyMove(args[0]);
+      applyMove(idx);
       selSet.clear();
       break;
     case ACT_SWAP:
       inputMode = 'swap';
-      applyMove(args[0]);
+      applyMove(idx);
       selSet.clear();
       break;
   }
+}
+
+function applyReplayEvent(type, args) {
+  if (!isReplaying) return;
+  applyReplayEventRaw(type, args[0]);
   render();
+}
+
+function seekReplayTo(targetMs) {
+  if (!replayDecoded) return;
+  const clampedMs = Math.max(0, Math.min(targetMs, replayDurationMs));
+
+  values = replayDecoded.init.slice();
+  selSet.clear();
+  finished = false;
+  replayNextEventIdx = 0;
+  replayVirtualMs = clampedMs;
+
+  for (const [t, type, idx] of replayDecoded.events) {
+    if (t > clampedMs) break;
+    applyReplayEventRaw(type, idx);
+    replayNextEventIdx++;
+  }
+
+  render();
+  updateReplayTimerDisplay();
 }
 
 function watchReplay(replay) {
@@ -1339,6 +1363,7 @@ function watchReplay(replay) {
   setReplaySpeedByIndex(REPLAY_DEFAULT_SPEED_INDEX);
   const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
   replayDurationMs = lastEvent ? lastEvent[0] : 0;
+  if (replaySeekSlider) { replaySeekSlider.max = String(Math.floor(replayDurationMs)); replaySeekSlider.value = '0'; }
   restartReplay(true);
 }
 
