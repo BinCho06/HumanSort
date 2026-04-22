@@ -1155,7 +1155,7 @@ function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
   const timelineTotalMs = getReplayTimelineTotalMs();
   const atReplayEnd = !replayIsPlaying && replayVirtualMs >= timelineTotalMs;
-  const actionLabel = replayIsPlaying ? 'Pause replay' : (atReplayEnd ? 'Play again replay' : 'Play replay');
+  const actionLabel = replayIsPlaying ? 'Pause replay' : (atReplayEnd ? 'Play again' : 'Play replay');
   if (replayPauseIcon) replayPauseIcon.style.display = replayIsPlaying ? '' : 'none';
   if (replayPlayIcon) replayPlayIcon.style.display = replayIsPlaying ? 'none' : '';
   replayPlayToggleBtn.title = actionLabel;
