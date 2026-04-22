@@ -19,6 +19,23 @@
     </div>
     <span id="timer">00:00.0</span>
     <div id="settings-wrap">
+      <button id="info-btn" title="How to Play" aria-label="How to Play">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </button>
+      <div id="info-panel">
+        <div class="settings-label">How to Play</div>
+        <ul id="info-list">
+          <li>Click a bar to <strong>select</strong> it (turns yellow).</li>
+          <li><strong>Drag-click</strong> across bars to select a range.</li>
+          <li>Click a selected bar to <strong>deselect</strong> it, or click outside the bars to clear all.</li>
+          <li>With bars selected, click another bar to <strong>move</strong> (Insert mode) or <strong>swap</strong> (Swap mode) them.</li>
+          <li>Sort all bars from shortest to tallest as fast as possible!</li>
+        </ul>
+      </div>
       <button id="settings-btn" title="Settings" aria-label="Settings">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>

@@ -12,6 +12,8 @@ const iconMoon       = document.getElementById('icon-moon');
 const iconSun        = document.getElementById('icon-sun');
 const settingsBtn    = document.getElementById('settings-btn');
 const settingsPanel  = document.getElementById('settings-panel');
+const infoBtnEl      = document.getElementById('info-btn');
+const infoPanelEl    = document.getElementById('info-panel');
 const insertBtn      = document.getElementById('insert-btn');
 const swapBtn        = document.getElementById('swap-btn');
 const modeDesc       = document.getElementById('mode-desc');
@@ -92,6 +94,8 @@ themeToggleBtn.addEventListener('click', () => {
 /* ── Settings panel ── */
 settingsBtn.addEventListener('click', (e) => {
   e.stopPropagation();
+  infoPanelEl.classList.remove('open');
+  infoBtnEl.classList.remove('open');
   settingsPanel.classList.toggle('open');
   settingsBtn.classList.toggle('open', settingsPanel.classList.contains('open'));
 });
@@ -99,7 +103,34 @@ settingsPanel.addEventListener('click', (e) => e.stopPropagation());
 document.addEventListener('click', () => {
   settingsPanel.classList.remove('open');
   settingsBtn.classList.remove('open');
+  infoPanelEl.classList.remove('open');
+  infoBtnEl.classList.remove('open');
 });
+
+/* ── Info panel ── */
+const INFO_SEEN_KEY = 'humansort_howtoplay_seen';
+infoBtnEl.addEventListener('click', (e) => {
+  e.stopPropagation();
+  settingsPanel.classList.remove('open');
+  settingsBtn.classList.remove('open');
+  infoPanelEl.classList.toggle('open');
+  infoBtnEl.classList.toggle('open', infoPanelEl.classList.contains('open'));
+  if (infoPanelEl.classList.contains('open')) {
+    try { localStorage.setItem(INFO_SEEN_KEY, '1'); } catch (_) {}
+  }
+});
+infoPanelEl.addEventListener('click', (e) => e.stopPropagation());
+
+/* Auto-show for first-time visitors */
+(function () {
+  try {
+    if (!localStorage.getItem(INFO_SEEN_KEY)) {
+      infoPanelEl.classList.add('open');
+      infoBtnEl.classList.add('open');
+      localStorage.setItem(INFO_SEEN_KEY, '1');
+    }
+  } catch (_) {}
+})();
 
 /* ── High Scores ── */
 const HS_KEY = 'humansort_scores';
