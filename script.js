@@ -18,7 +18,6 @@ const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
 const replayPlayToggleBtn = document.getElementById('replay-play-toggle-btn');
-const replayPlayAgainBtn  = document.getElementById('replay-play-again-btn');
 const replaySpeedDownBtn  = document.getElementById('replay-speed-down-btn');
 const replaySpeedUpBtn    = document.getElementById('replay-speed-up-btn');
 const replaySpeedLabel    = document.getElementById('replay-speed-label');
@@ -888,17 +887,18 @@ function getRange(a, b) {
 function moveSelectedTo(targetIdx) {
   if (selSet.size === 0 || selSet.has(targetIdx)) return;
 
-  const selectedVals = Array.from(selSet)
-    .sort((a, b) => a - b)
-    .map(i => values[i]);
+  const selIndices = Array.from(selSet).sort((a, b) => a - b);
+  const selectedVals = selIndices.map(i => values[i]);
 
   const remainingPairs = values
     .map((v, i) => ({ v, i }))
     .filter(({ i }) => !selSet.has(i));
 
-  // Insert the group just before the target column (adjusted for removed items)
+  // Insert before target by default; if selection is fully left of target,
+  // insert after target so adjacent left/right clicks act like a swap.
   let insertAt = remainingPairs.findIndex(p => p.i >= targetIdx);
   if (insertAt === -1) insertAt = remainingPairs.length;
+  if (selIndices[selIndices.length - 1] < targetIdx) insertAt++;
 
   values = [
     ...remainingPairs.slice(0, insertAt).map(p => p.v),
@@ -1148,7 +1148,7 @@ function updateReplaySeekSlider() {
 function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
   const actionLabel = replayIsPlaying ? 'Pause replay' : 'Play replay';
-  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸' : '▶';
+  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸\uFE0E' : '▶';
   replayPlayToggleBtn.title = actionLabel;
   replayPlayToggleBtn.setAttribute('aria-label', actionLabel);
 }
@@ -1328,7 +1328,6 @@ function newGame() {
 playBtn.addEventListener('click', startPlay);
 replayStopBtn.addEventListener('click', stopReplay);
 if (replayPlayToggleBtn) replayPlayToggleBtn.addEventListener('click', toggleReplayPlayback);
-if (replayPlayAgainBtn) replayPlayAgainBtn.addEventListener('click', () => restartReplay(true));
 if (replaySpeedDownBtn) replaySpeedDownBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex - 1));
 if (replaySpeedUpBtn) replaySpeedUpBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex + 1));
 if (replaySeekSlider) {
