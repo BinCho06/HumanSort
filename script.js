@@ -88,6 +88,9 @@ const ACT_SELECT   = 0;
 const ACT_DESELECT = 1;
 const ACT_MOVE     = 2;
 const ACT_SWAP     = 3;
+const REPLAY_DESELECT_ALL_IDX = 63;
+const GLOBAL_REPLAY_CACHE_KEY = 'humansort_global_replay_cache_v1';
+const GLOBAL_REPLAY_CACHE_MAX_ENTRIES = 200;
 let supabaseClient = null;
 const globalReplayCache = new Map();
 
@@ -442,7 +445,58 @@ function isCurrentPlayerEntry(entry, currentUserId) {
 
 function getGlobalReplayCacheKey(entry) {
   const safe = (value) => (value === null || value === undefined ? '__NULL__' : String(value));
-  return `${safe(entry.difficulty)}|${safe(entry.user_id)}|${Number(entry.score_ms) || 0}|${safe(entry.created_at)}`;
+  return `${safe(entry.difficulty)}|${safe(entry.user_id)}|${Number(entry.score_ms) || 0}`;
+}
+
+function loadGlobalReplayCacheFromStorage() {
+  if (globalReplayCache.size > 0) return;
+  try {
+    const raw = localStorage.getItem(GLOBAL_REPLAY_CACHE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return;
+    for (const [key, replay] of Object.entries(parsed)) {
+      if (typeof replay === 'string' && replay) {
+        globalReplayCache.set(key, replay);
+      }
+    }
+  } catch {
+    // Ignore cache read failures
+  }
+}
+
+function persistGlobalReplayCache() {
+  try {
+    const compact = {};
+    const skipCount = Math.max(0, globalReplayCache.size - GLOBAL_REPLAY_CACHE_MAX_ENTRIES);
+    let index = 0;
+    for (const [key, replay] of globalReplayCache.entries()) {
+      if (index++ < skipCount) continue;
+      compact[key] = replay;
+    }
+    localStorage.setItem(GLOBAL_REPLAY_CACHE_KEY, JSON.stringify(compact));
+  } catch {
+    // Ignore cache write failures
+  }
+}
+
+function getCachedGlobalReplay(cacheKey) {
+  if (globalReplayCache.has(cacheKey)) return globalReplayCache.get(cacheKey);
+  loadGlobalReplayCacheFromStorage();
+  return globalReplayCache.get(cacheKey) || null;
+}
+
+function setCachedGlobalReplay(cacheKey, replay) {
+  if (!cacheKey || typeof replay !== 'string' || !replay) return;
+  // Reinsert existing keys to keep Map insertion order aligned with recency.
+  if (globalReplayCache.has(cacheKey)) globalReplayCache.delete(cacheKey);
+  globalReplayCache.set(cacheKey, replay);
+  while (globalReplayCache.size > GLOBAL_REPLAY_CACHE_MAX_ENTRIES) {
+    const oldestKey = globalReplayCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    globalReplayCache.delete(oldestKey);
+  }
+  persistGlobalReplayCache();
 }
 
 function shouldShowOwnRankRow(ownEntry) {
@@ -452,9 +506,8 @@ function shouldShowOwnRankRow(ownEntry) {
 async function fetchGlobalReplayData(entry) {
   if (!supabaseClient || !entry) return null;
   const cacheKey = getGlobalReplayCacheKey(entry);
-  if (globalReplayCache.has(cacheKey)) {
-    return globalReplayCache.get(cacheKey);
-  }
+  const cached = getCachedGlobalReplay(cacheKey);
+  if (cached) return cached;
   try {
     let query = supabaseClient
       .from(GLOBAL_LEADERBOARD_TABLE)
@@ -463,12 +516,10 @@ async function fetchGlobalReplayData(entry) {
       .eq('score_ms', Number(entry.score_ms) || 0);
     if (entry.user_id == null) query = query.is('user_id', null);
     else query = query.eq('user_id', entry.user_id);
-    if (entry.created_at == null) query = query.is('created_at', null);
-    else query = query.eq('created_at', entry.created_at);
     const { data, error } = await query.limit(1);
     if (error) throw error;
     const replay = (data && data[0] && typeof data[0].replay_data === 'string') ? data[0].replay_data : null;
-    if (replay) globalReplayCache.set(cacheKey, replay);
+    if (replay) setCachedGlobalReplay(cacheKey, replay);
     return replay;
   } catch {
     // Network/query failures should fail replay playback silently for this row.
@@ -566,7 +617,7 @@ async function fetchOwnRankedEntry(diff, currentUserId) {
   if (!supabaseClient || !currentUserId) return null;
   const { data: bestRows, error: bestError } = await supabaseClient
     .from(GLOBAL_LEADERBOARD_TABLE)
-    .select('user_id,player_name,difficulty,score_ms,created_at')
+    .select('user_id,player_name,difficulty,score_ms')
     .eq('difficulty', diff)
     .eq('user_id', currentUserId)
     .order('score_ms', { ascending: true })
@@ -577,24 +628,16 @@ async function fetchOwnRankedEntry(diff, currentUserId) {
   if (!best) return null;
 
   const score = Number(best.score_ms) || 0;
-  const createdAt = best.created_at;
   const { count: betterCount, error: betterError } = await supabaseClient
     .from(GLOBAL_LEADERBOARD_TABLE)
     .select('*', { count: 'exact', head: true })
     .eq('difficulty', diff)
     .lt('score_ms', score);
   if (betterError) throw betterError;
-  const { count: tieEarlierCount, error: tieError } = await supabaseClient
-    .from(GLOBAL_LEADERBOARD_TABLE)
-    .select('*', { count: 'exact', head: true })
-    .eq('difficulty', diff)
-    .eq('score_ms', score)
-    .lt('created_at', createdAt);
-  if (tieError) throw tieError;
 
   return {
     ...best,
-    rank: Number(betterCount || 0) + Number(tieEarlierCount || 0) + 1
+    rank: Number(betterCount || 0) + 1
   };
 }
 
@@ -610,7 +653,7 @@ async function refreshGlobalLeaderboards() {
     const currentUserId = await getCurrentUserId();
     const { data, error } = await supabaseClient
       .from(GLOBAL_LEADERBOARD_TABLE)
-      .select('user_id,player_name,difficulty,score_ms,created_at')
+      .select('user_id,player_name,difficulty,score_ms')
       .in('difficulty', difficulties)
       .order('score_ms', { ascending: true })
       .order('created_at', { ascending: true });
@@ -789,7 +832,13 @@ function setSelection(nextSet, shouldRecord = true) {
     const selected   = [];
     for (const i of selSet) if (!nextSet.has(i)) deselected.push(i);
     for (const i of nextSet) if (!selSet.has(i)) selected.push(i);
-    deselected.sort((a, b) => a - b).forEach(i => recEvent(ACT_DESELECT, i));
+    if (deselected.length > 0) {
+      if (nextSet.size === 0) {
+        recEvent(ACT_DESELECT, REPLAY_DESELECT_ALL_IDX);
+      } else {
+        deselected.sort((a, b) => a - b).forEach(i => recEvent(ACT_DESELECT, i));
+      }
+    }
     selected.sort((a, b) => a - b).forEach(i => recEvent(ACT_SELECT, i));
   }
   selSet = nextSet;
@@ -1090,14 +1139,18 @@ function updateReplaySpeedUi() {
 }
 
 function updateReplaySeekSlider() {
-  if (!replaySeekSlider || !replayDurationMs) return;
-  replaySeekSlider.max   = String(Math.floor(replayDurationMs));
-  replaySeekSlider.value = String(Math.floor(Math.min(replayVirtualMs, replayDurationMs)));
+  if (!replaySeekSlider || !replayDecoded) return;
+  const timelineTotalMs = getReplayTimelineTotalMs();
+  replaySeekSlider.max   = String(Math.floor(timelineTotalMs));
+  replaySeekSlider.value = String(Math.floor(Math.min(Math.max(replayVirtualMs, 0), timelineTotalMs)));
 }
 
 function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
-  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸ Pause' : '▶ Play';
+  const actionLabel = replayIsPlaying ? 'Pause replay' : 'Play replay';
+  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸' : '▶';
+  replayPlayToggleBtn.title = actionLabel;
+  replayPlayToggleBtn.setAttribute('aria-label', actionLabel);
 }
 
 function getReplaySpeed() {
@@ -1285,7 +1338,7 @@ if (replaySeekSlider) {
     if (replayIsPlaying) pauseReplayAnimation();
   });
   replaySeekSlider.addEventListener('input', () => {
-    if (!replayDecoded || !replayDurationMs) return;
+    if (!replayDecoded) return;
     seekReplayTo(Number(replaySeekSlider.value));
   });
   replaySeekSlider.addEventListener('pointerup', () => {
@@ -1301,7 +1354,10 @@ window.addEventListener('resize', render);
 function applyReplayEventRaw(type, idx) {
   switch (type) {
     case ACT_SELECT:   selSet.add(idx); break;
-    case ACT_DESELECT: selSet.delete(idx); break;
+    case ACT_DESELECT:
+      if (idx === REPLAY_DESELECT_ALL_IDX) selSet.clear();
+      else selSet.delete(idx);
+      break;
     case ACT_MOVE:
       inputMode = 'insert';
       applyMove(idx);
@@ -1323,7 +1379,8 @@ function applyReplayEvent(type, args) {
 
 function seekReplayTo(targetMs) {
   if (!replayDecoded) return;
-  const clampedMs = Math.max(0, Math.min(targetMs, replayDurationMs));
+  const timelineTotalMs = getReplayTimelineTotalMs();
+  const clampedMs = Math.max(0, Math.min(targetMs, timelineTotalMs));
 
   values = replayDecoded.init.slice();
   selSet.clear();
@@ -1335,6 +1392,13 @@ function seekReplayTo(targetMs) {
     if (t > clampedMs) break;
     applyReplayEventRaw(type, idx);
     replayNextEventIdx++;
+  }
+
+  if (clampedMs >= timelineTotalMs) {
+    finished = true;
+    replayIsPlaying = false;
+    stopReplayAnimation();
+    updateReplayPlayToggleLabel();
   }
 
   render();
@@ -1363,7 +1427,7 @@ function watchReplay(replay) {
   setReplaySpeedByIndex(REPLAY_DEFAULT_SPEED_INDEX);
   const lastEvent = decodedReplay.events[decodedReplay.events.length - 1];
   replayDurationMs = lastEvent ? lastEvent[0] : 0;
-  if (replaySeekSlider) { replaySeekSlider.max = String(Math.floor(replayDurationMs)); replaySeekSlider.value = '0'; }
+  if (replaySeekSlider) { replaySeekSlider.max = String(Math.floor(getReplayTimelineTotalMs())); replaySeekSlider.value = '0'; }
   restartReplay(true);
 }
 

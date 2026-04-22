@@ -32,5 +32,6 @@ Binary layout:
   - Action byte: `[AA|IIIIII]`
     - `AA` action type: `00=Select`, `01=Deselect`, `10=Move`, `11=Swap`
     - `IIIIII` column index (`0..63`)
+    - Special token: `01|111111` (`AA111111`) means **deselect all**
 
 This format significantly reduces replay size while still preserving full action-by-action playback.

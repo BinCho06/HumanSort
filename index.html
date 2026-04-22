@@ -77,15 +77,15 @@
   <div id="replay-banner">
     <span>▶ Watching Replay</span>
     <div id="replay-controls">
-      <button id="replay-play-toggle-btn" class="ctrl-btn" type="button">⏸ Pause</button>
-      <button id="replay-play-again-btn" class="ctrl-btn" type="button">↺ Play Again</button>
+      <button id="replay-play-toggle-btn" class="ctrl-btn" type="button" title="Pause replay" aria-label="Pause replay">⏸</button>
+      <button id="replay-play-again-btn" class="ctrl-btn" type="button" title="Restart replay" aria-label="Restart replay">↺</button>
       <div id="replay-speed-group">
         <button id="replay-speed-down-btn" class="ctrl-btn replay-speed-btn" type="button">−</button>
         <span id="replay-speed-label" aria-live="polite">1x</span>
         <button id="replay-speed-up-btn" class="ctrl-btn replay-speed-btn" type="button">+</button>
       </div>
-      <input id="replay-seek-slider" type="range" min="0" max="100000" step="100" value="0" aria-label="Replay position">
-      <button id="replay-stop-btn" class="ctrl-btn" type="button">✕ Stop</button>
+      <input id="replay-seek-slider" type="range" min="0" max="100000" step="1" value="0" aria-label="Replay position">
+      <button id="replay-stop-btn" class="ctrl-btn" type="button" title="Stop replay" aria-label="Stop replay">✕</button>
     </div>
   </div>
 
