@@ -278,6 +278,36 @@ body {
   opacity: 0.85;
 }
 
+#how-to-play {
+  text-align: left;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 10px;
+}
+
+#how-to-play h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+
+#how-to-play ul {
+  margin: 0;
+  padding-left: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#how-to-play li {
+  font-size: 12px;
+  line-height: 1.35;
+  opacity: 0.92;
+}
+
 /* ── High Scores ── */
 #highscores {
   margin: 0 8px 16px;
