@@ -888,6 +888,7 @@ function getRange(a, b) {
 function moveSelectedTo(targetIdx) {
   if (selSet.size === 0 || selSet.has(targetIdx)) return;
 
+  const selIndices = Array.from(selSet).sort((a, b) => a - b);
   const selectedVals = Array.from(selSet)
     .sort((a, b) => a - b)
     .map(i => values[i]);
@@ -896,9 +897,11 @@ function moveSelectedTo(targetIdx) {
     .map((v, i) => ({ v, i }))
     .filter(({ i }) => !selSet.has(i));
 
-  // Insert the group just before the target column (adjusted for removed items)
+  // Insert before target by default; if selection is fully left of target,
+  // insert after target so adjacent left/right clicks act like a swap.
   let insertAt = remainingPairs.findIndex(p => p.i >= targetIdx);
   if (insertAt === -1) insertAt = remainingPairs.length;
+  if (selIndices[selIndices.length - 1] < targetIdx) insertAt++;
 
   values = [
     ...remainingPairs.slice(0, insertAt).map(p => p.v),
