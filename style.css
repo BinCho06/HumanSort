@@ -424,6 +424,21 @@ body {
   justify-content: flex-end;
 }
 
+#replay-play-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 5px 8px;
+}
+
+#replay-play-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
 #replay-speed-group {
   display: flex;
   align-items: center;
