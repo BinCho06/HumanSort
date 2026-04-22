@@ -36,17 +36,46 @@ const nameModalSaveBtn = document.getElementById('name-modal-save-btn');
 const nameModalSkipBtn = document.getElementById('name-modal-skip-btn');
 
 /* ── Difficulty state ── */
-let selectedCols = 30;
-let selectedDiff = 'normal'; // 'easy' | 'normal' | 'hard'
+const DIFFICULTY_STORAGE_KEY = 'humansort_selected_difficulty_cols';
+let selectedCols = 20;
+let selectedDiff = 'easy'; // 'easy' | 'normal' | 'hard'
 const diffMap = { '20': 'easy', '30': 'normal', '50': 'hard' };
 
-diffBtns.forEach(btn => {
+function getStoredDifficultyCols() {
+  try {
+    const raw = localStorage.getItem(DIFFICULTY_STORAGE_KEY);
+    return raw && diffMap[raw] ? parseInt(raw, 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistDifficultyCols(cols) {
+  try {
+    localStorage.setItem(DIFFICULTY_STORAGE_KEY, String(cols));
+  } catch {
+    // ignore localStorage failures
+  }
+}
+
+function updateDifficultyButtons() {
+  const activeValue = String(selectedCols);
+  diffBtns.forEach((btn) => btn.classList.toggle('active', btn.dataset.cols === activeValue));
+}
+
+function setDifficulty(cols, { persist = true, startNew = true } = {}) {
+  const normalized = String(cols);
+  if (!diffMap[normalized]) return;
+  selectedCols = parseInt(normalized, 10);
+  selectedDiff = diffMap[normalized];
+  updateDifficultyButtons();
+  if (persist) persistDifficultyCols(selectedCols);
+  if (startNew) newGame();
+}
+
+diffBtns.forEach((btn) => {
   btn.addEventListener('click', () => {
-    diffBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    selectedCols = parseInt(btn.dataset.cols, 10);
-    selectedDiff = diffMap[btn.dataset.cols];
-    newGame();
+    setDifficulty(btn.dataset.cols);
   });
 });
 
@@ -1462,4 +1491,7 @@ function toggleReplayPlayback() {
 /* ── Boot ── */
 renderHighScores();
 initGlobalFeatures();
+const storedDifficultyCols = getStoredDifficultyCols();
+if (storedDifficultyCols !== null) setDifficulty(storedDifficultyCols, { persist: false, startNew: false });
+else updateDifficultyButtons();
 newGame();

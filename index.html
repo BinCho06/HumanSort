@@ -10,6 +10,13 @@
 <body>
 
   <div id="controls">
+    <div id="difficulty-wrap" aria-label="Difficulty">
+      <div id="difficulty-group">
+        <button class="diff-btn active" data-cols="20">Easy</button>
+        <button class="diff-btn" data-cols="30">Normal</button>
+        <button class="diff-btn" data-cols="50">Hard</button>
+      </div>
+    </div>
     <span id="timer">00:00.0</span>
     <div id="settings-wrap">
       <button id="settings-btn" title="Settings" aria-label="Settings">
@@ -19,14 +26,6 @@
         </svg>
       </button>
       <div id="settings-panel">
-        <div class="settings-section">
-          <div class="settings-label">Difficulty</div>
-          <div id="difficulty-group">
-            <button class="diff-btn" data-cols="20">Easy</button>
-            <button class="diff-btn active" data-cols="30">Normal</button>
-            <button class="diff-btn" data-cols="50">Hard</button>
-          </div>
-        </div>
         <div class="settings-section">
           <div class="settings-label">Move Mode</div>
           <div id="mode-group">
