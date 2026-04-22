@@ -80,7 +80,7 @@ const MAX_PLAYER_NAME_LENGTH = 20;
 const GLOBAL_LEADERBOARD_MAX_ENTRIES = 10;
 const GLOBAL_LEADERBOARD_TABLE = 'leaderboard_scores';
 const MAX_REPLAY_DELTA_MS = (2 ** 35) - 1; // 35 bits across max 5 varint bytes
-const REPLAY_SPEED_STEPS = [0.1, 0.2, 0.5, 1, 1.5, 2, 4, 10, 100, 1000];
+const REPLAY_SPEED_STEPS = [0.1, 0.2, 0.5, 1, 1.5, 2, 4, 10, 100];
 const REPLAY_DEFAULT_SPEED_INDEX = REPLAY_SPEED_STEPS.indexOf(1);
 const REPLAY_FINISH_HOLD_MS = 400;
 const SUPABASE_URL = 'https://ruwcxfppupahnzvzqrej.supabase.co';
@@ -1153,7 +1153,9 @@ function updateReplaySeekSlider() {
 
 function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
-  const actionLabel = replayIsPlaying ? 'Pause replay' : 'Play replay';
+  const timelineTotalMs = getReplayTimelineTotalMs();
+  const atReplayEnd = !replayIsPlaying && replayVirtualMs >= timelineTotalMs;
+  const actionLabel = replayIsPlaying ? 'Pause replay' : (atReplayEnd ? 'Play again replay' : 'Play replay');
   if (replayPauseIcon) replayPauseIcon.style.display = replayIsPlaying ? '' : 'none';
   if (replayPlayIcon) replayPlayIcon.style.display = replayIsPlaying ? 'none' : '';
   replayPlayToggleBtn.title = actionLabel;
@@ -1453,6 +1455,7 @@ function stopReplay() {
 function toggleReplayPlayback() {
   if (!isReplaying || !replayDecoded) return;
   if (replayIsPlaying) pauseReplayAnimation();
+  else if (replayVirtualMs >= getReplayTimelineTotalMs()) restartReplay(true);
   else startReplayAnimation();
 }
 
