@@ -78,6 +78,9 @@ body {
 #settings-wrap {
   position: relative;
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 #settings-btn {
@@ -116,6 +119,59 @@ body {
   gap: 12px;
 }
 #settings-panel.open { display: flex; }
+
+/* ── Info button & panel ── */
+#info-btn {
+  background: transparent;
+  border: 1px solid var(--ctrl-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+#info-btn:hover { background: var(--btn-hover); color: #f0f0f0; border-color: var(--btn-hover); }
+#info-btn.open {
+  background: var(--btn-bg);
+  color: #f0f0f0;
+  border-color: var(--btn-bg);
+}
+
+#info-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--ctrl-bg);
+  border: 1px solid var(--ctrl-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  z-index: 50;
+  min-width: 260px;
+  max-width: 320px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+  flex-direction: column;
+  gap: 10px;
+}
+#info-panel.open { display: flex; }
+
+#info-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#info-list li {
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.92;
+}
 
 .settings-section {
   display: flex;
@@ -276,36 +332,6 @@ body {
 #pregame-card p {
   font-size: 13px;
   opacity: 0.85;
-}
-
-#how-to-play {
-  text-align: left;
-  border: 1px solid var(--ctrl-border);
-  border-radius: 6px;
-  background: var(--bg);
-  padding: 10px;
-}
-
-#how-to-play h3 {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.75;
-  margin-bottom: 6px;
-}
-
-#how-to-play ul {
-  margin: 0;
-  padding-left: 17px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-#how-to-play li {
-  font-size: 12px;
-  line-height: 1.35;
-  opacity: 0.92;
 }
 
 /* ── High Scores ── */
