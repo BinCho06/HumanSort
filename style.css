@@ -132,6 +132,11 @@ body {
 }
 
 /* ── Difficulty toggle ── */
+#difficulty-wrap {
+  display: flex;
+  align-items: center;
+}
+
 #difficulty-group {
   display: flex;
   border-radius: 6px;
