@@ -445,7 +445,7 @@ function isCurrentPlayerEntry(entry, currentUserId) {
 
 function getGlobalReplayCacheKey(entry) {
   const safe = (value) => (value === null || value === undefined ? '__NULL__' : String(value));
-  return `${safe(entry.difficulty)}|${safe(entry.user_id)}|${Number(entry.score_ms) || 0}|${safe(entry.created_at)}`;
+  return `${safe(entry.difficulty)}|${safe(entry.user_id)}|${Number(entry.score_ms) || 0}`;
 }
 
 function loadGlobalReplayCacheFromStorage() {
@@ -516,8 +516,6 @@ async function fetchGlobalReplayData(entry) {
       .eq('score_ms', Number(entry.score_ms) || 0);
     if (entry.user_id == null) query = query.is('user_id', null);
     else query = query.eq('user_id', entry.user_id);
-    if (entry.created_at == null) query = query.is('created_at', null);
-    else query = query.eq('created_at', entry.created_at);
     const { data, error } = await query.limit(1);
     if (error) throw error;
     const replay = (data && data[0] && typeof data[0].replay_data === 'string') ? data[0].replay_data : null;
@@ -619,35 +617,26 @@ async function fetchOwnRankedEntry(diff, currentUserId) {
   if (!supabaseClient || !currentUserId) return null;
   const { data: bestRows, error: bestError } = await supabaseClient
     .from(GLOBAL_LEADERBOARD_TABLE)
-    .select('user_id,player_name,difficulty,score_ms,created_at')
+    .select('user_id,player_name,difficulty,score_ms')
     .eq('difficulty', diff)
     .eq('user_id', currentUserId)
     .order('score_ms', { ascending: true })
-    .order('created_at', { ascending: true })
     .limit(1);
   if (bestError) throw bestError;
   const best = bestRows && bestRows[0];
   if (!best) return null;
 
   const score = Number(best.score_ms) || 0;
-  const createdAt = best.created_at;
   const { count: betterCount, error: betterError } = await supabaseClient
     .from(GLOBAL_LEADERBOARD_TABLE)
     .select('*', { count: 'exact', head: true })
     .eq('difficulty', diff)
     .lt('score_ms', score);
   if (betterError) throw betterError;
-  const { count: tieEarlierCount, error: tieError } = await supabaseClient
-    .from(GLOBAL_LEADERBOARD_TABLE)
-    .select('*', { count: 'exact', head: true })
-    .eq('difficulty', diff)
-    .eq('score_ms', score)
-    .lt('created_at', createdAt);
-  if (tieError) throw tieError;
 
   return {
     ...best,
-    rank: Number(betterCount || 0) + Number(tieEarlierCount || 0) + 1
+    rank: Number(betterCount || 0) + 1
   };
 }
 
@@ -663,10 +652,9 @@ async function refreshGlobalLeaderboards() {
     const currentUserId = await getCurrentUserId();
     const { data, error } = await supabaseClient
       .from(GLOBAL_LEADERBOARD_TABLE)
-      .select('user_id,player_name,difficulty,score_ms,created_at')
+      .select('user_id,player_name,difficulty,score_ms')
       .in('difficulty', difficulties)
-      .order('score_ms', { ascending: true })
-      .order('created_at', { ascending: true });
+      .order('score_ms', { ascending: true });
     if (error) throw error;
 
     const byDifficulty = { easy: [], normal: [], hard: [] };
