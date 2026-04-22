@@ -310,7 +310,9 @@ function tryParseReplayEvents(bytes, startOffset, numBars) {
     const type = action >> 6;
     t += deltaInfo.delta;
     const idx = action & 0x3f;
-    if (idx >= numBars && !(type === ACT_DESELECT && idx === REPLAY_DESELECT_ALL_IDX)) return null;
+    const isValidBarIndex = idx < numBars;
+    const isDeselectAllToken = type === ACT_DESELECT && idx === REPLAY_DESELECT_ALL_IDX;
+    if (!isValidBarIndex && !isDeselectAllToken) return null;
     events.push([t, type, idx]);
   }
 
