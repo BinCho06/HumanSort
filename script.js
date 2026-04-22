@@ -467,8 +467,13 @@ function loadGlobalReplayCacheFromStorage() {
 
 function persistGlobalReplayCache() {
   try {
-    const entries = Array.from(globalReplayCache.entries()).slice(-GLOBAL_REPLAY_CACHE_MAX_ENTRIES);
-    const compact = Object.fromEntries(entries);
+    const compact = {};
+    const skipCount = Math.max(0, globalReplayCache.size - GLOBAL_REPLAY_CACHE_MAX_ENTRIES);
+    let index = 0;
+    for (const [key, replay] of globalReplayCache.entries()) {
+      if (index++ < skipCount) continue;
+      compact[key] = replay;
+    }
     localStorage.setItem(GLOBAL_REPLAY_CACHE_KEY, JSON.stringify(compact));
   } catch {
     // Ignore cache write failures
@@ -483,6 +488,7 @@ function getCachedGlobalReplay(cacheKey) {
 
 function setCachedGlobalReplay(cacheKey, replay) {
   if (!cacheKey || typeof replay !== 'string' || !replay) return;
+  // Reinsert existing keys to keep Map insertion order aligned with recency.
   if (globalReplayCache.has(cacheKey)) globalReplayCache.delete(cacheKey);
   globalReplayCache.set(cacheKey, replay);
   while (globalReplayCache.size > GLOBAL_REPLAY_CACHE_MAX_ENTRIES) {
