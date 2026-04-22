@@ -889,9 +889,7 @@ function moveSelectedTo(targetIdx) {
   if (selSet.size === 0 || selSet.has(targetIdx)) return;
 
   const selIndices = Array.from(selSet).sort((a, b) => a - b);
-  const selectedVals = Array.from(selSet)
-    .sort((a, b) => a - b)
-    .map(i => values[i]);
+  const selectedVals = selIndices.map(i => values[i]);
 
   const remainingPairs = values
     .map((v, i) => ({ v, i }))
