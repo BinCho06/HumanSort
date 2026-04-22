@@ -18,6 +18,8 @@ const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
 const replayPlayToggleBtn = document.getElementById('replay-play-toggle-btn');
+const replayPauseIcon = document.getElementById('replay-icon-pause');
+const replayPlayIcon  = document.getElementById('replay-icon-play');
 const replaySpeedDownBtn  = document.getElementById('replay-speed-down-btn');
 const replaySpeedUpBtn    = document.getElementById('replay-speed-up-btn');
 const replaySpeedLabel    = document.getElementById('replay-speed-label');
@@ -894,11 +896,12 @@ function moveSelectedTo(targetIdx) {
     .map((v, i) => ({ v, i }))
     .filter(({ i }) => !selSet.has(i));
 
-  // Insert before target by default; if selection is fully left of target,
-  // insert after target so adjacent left/right clicks act like a swap.
+  // Insert before target by default.
   let insertAt = remainingPairs.findIndex(p => p.i >= targetIdx);
   if (insertAt === -1) insertAt = remainingPairs.length;
-  if (selIndices[selIndices.length - 1] < targetIdx) insertAt++;
+  // Only nudge to after-target when clicking the immediate right-adjacent
+  // column; without this special case the move is usually a no-op.
+  if (targetIdx === selIndices[selIndices.length - 1] + 1) insertAt++;
 
   values = [
     ...remainingPairs.slice(0, insertAt).map(p => p.v),
@@ -1148,7 +1151,8 @@ function updateReplaySeekSlider() {
 function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
   const actionLabel = replayIsPlaying ? 'Pause replay' : 'Play replay';
-  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸\uFE0E' : '▶';
+  if (replayPauseIcon) replayPauseIcon.style.display = replayIsPlaying ? '' : 'none';
+  if (replayPlayIcon) replayPlayIcon.style.display = replayIsPlaying ? 'none' : '';
   replayPlayToggleBtn.title = actionLabel;
   replayPlayToggleBtn.setAttribute('aria-label', actionLabel);
 }

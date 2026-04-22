@@ -77,7 +77,15 @@
   <div id="replay-banner">
     <span>▶ Replay</span>
     <div id="replay-controls">
-      <button id="replay-play-toggle-btn" class="ctrl-btn" type="button" title="Pause replay" aria-label="Pause replay">⏸&#xFE0E;</button>
+      <button id="replay-play-toggle-btn" class="ctrl-btn" type="button" title="Pause replay" aria-label="Pause replay">
+        <svg id="replay-icon-pause" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+          <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+        </svg>
+        <svg id="replay-icon-play" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" style="display:none">
+          <path d="M8 5v14l11-7z"></path>
+        </svg>
+      </button>
       <div id="replay-speed-group">
         <button id="replay-speed-down-btn" class="ctrl-btn replay-speed-btn" type="button">−</button>
         <span id="replay-speed-label" aria-live="polite">1x</span>
