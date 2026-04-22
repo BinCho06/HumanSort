@@ -621,6 +621,7 @@ async function fetchOwnRankedEntry(diff, currentUserId) {
     .eq('difficulty', diff)
     .eq('user_id', currentUserId)
     .order('score_ms', { ascending: true })
+    .order('created_at', { ascending: true })
     .limit(1);
   if (bestError) throw bestError;
   const best = bestRows && bestRows[0];
@@ -654,7 +655,8 @@ async function refreshGlobalLeaderboards() {
       .from(GLOBAL_LEADERBOARD_TABLE)
       .select('user_id,player_name,difficulty,score_ms')
       .in('difficulty', difficulties)
-      .order('score_ms', { ascending: true });
+      .order('score_ms', { ascending: true })
+      .order('created_at', { ascending: true });
     if (error) throw error;
 
     const byDifficulty = { easy: [], normal: [], hard: [] };
