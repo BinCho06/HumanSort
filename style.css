@@ -448,7 +448,7 @@ body {
 }
 
 #replay-speed-label {
-  min-width: 52px;
+  min-width: 40px;
   text-align: center;
   font-family: monospace;
   font-size: 12px;
