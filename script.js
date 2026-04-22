@@ -18,7 +18,6 @@ const modeDesc       = document.getElementById('mode-desc');
 const replayBanner   = document.getElementById('replay-banner');
 const replayStopBtn  = document.getElementById('replay-stop-btn');
 const replayPlayToggleBtn = document.getElementById('replay-play-toggle-btn');
-const replayPlayAgainBtn  = document.getElementById('replay-play-again-btn');
 const replaySpeedDownBtn  = document.getElementById('replay-speed-down-btn');
 const replaySpeedUpBtn    = document.getElementById('replay-speed-up-btn');
 const replaySpeedLabel    = document.getElementById('replay-speed-label');
@@ -1149,7 +1148,7 @@ function updateReplaySeekSlider() {
 function updateReplayPlayToggleLabel() {
   if (!replayPlayToggleBtn) return;
   const actionLabel = replayIsPlaying ? 'Pause replay' : 'Play replay';
-  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸' : '▶';
+  replayPlayToggleBtn.textContent = replayIsPlaying ? '⏸\uFE0E' : '▶';
   replayPlayToggleBtn.title = actionLabel;
   replayPlayToggleBtn.setAttribute('aria-label', actionLabel);
 }
@@ -1329,7 +1328,6 @@ function newGame() {
 playBtn.addEventListener('click', startPlay);
 replayStopBtn.addEventListener('click', stopReplay);
 if (replayPlayToggleBtn) replayPlayToggleBtn.addEventListener('click', toggleReplayPlayback);
-if (replayPlayAgainBtn) replayPlayAgainBtn.addEventListener('click', () => restartReplay(true));
 if (replaySpeedDownBtn) replaySpeedDownBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex - 1));
 if (replaySpeedUpBtn) replaySpeedUpBtn.addEventListener('click', () => setReplaySpeedByIndex(replaySpeedIndex + 1));
 if (replaySeekSlider) {
